@@ -177,6 +177,20 @@ def test_load_shedding_covers_shortfall(two_zone, hours):
     assert_frame(result.shadow_prices, {"N-S": [2980, 0]})
 
 
+def test_load_shedding_never_exceeds_the_zones_own_load(two_zone, hours):
+    # S is short only in hour 0. In hour 1 its load is small, while N lacks
+    # generation: shedding in S must not export to N, where it would be cheaper
+    # than the costly generator in N.
+    load = pd.DataFrame({"N": [0.0, 50.0], "S": [200.0, 10.0]}, index=hours[:2])
+    generators = make_generators({"costly_N": ("N", 30, 5000), "cheap_S": ("S", 100, 20)})
+    result = run_dc_opf(two_zone, load, generators, load_shedding_cost=3000)
+
+    assert_frame(result.load_shedding_mw, {"N": [0, 0], "S": [100, 0]})
+    assert_frame(result.flows_mw, {"N-S": [0, -50]})
+    assert_frame(result.dispatch_mw, {"costly_N": [0, 0], "cheap_S": [100, 60]})
+    assert (result.load_shedding_mw <= load + 1e-6).all().all()
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [
@@ -187,6 +201,7 @@ def test_load_shedding_covers_shortfall(two_zone, hours):
         ({"snapshots": [7]}, "snapshots must be"),
         ({"generators": make_generators({"g": ("Q", 1, 1)})}, "unknown zones"),
         ({"generators": make_generators({"g": ("N", -1, 1)})}, "non-negative"),
+        ({"generators": make_generators({"load_shedding N": ("N", 1, 1)})}, "must not"),
         ({"generators": pd.DataFrame({"zone": ["N"]}, index=["g"])}, "missing columns"),
         ({"availability": pd.DataFrame({"zzz": [1.0]})}, "not generators"),
         ({"availability": pd.DataFrame({"cheap_N": [1.5]})}, "between 0 and 1"),

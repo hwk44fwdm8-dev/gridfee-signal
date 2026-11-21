@@ -130,12 +130,17 @@ def run_dc_opf(
         p_max_pu=availability if availability is not None else 1.0,
     )
     if load_shedding_cost is not None:
+        # Shedding is capped at the zone's own load in each hour, so it can never
+        # act as generation that exports to other zones.
         shedding_zones = pd.Index(network.zone_ids)
+        sheddable = load_mw.reindex(columns=shedding_zones, fill_value=0.0).clip(lower=0.0)
+        peak = sheddable.max()
         n.add(
             "Generator",
             _SHEDDING_PREFIX + shedding_zones,
             bus=shedding_zones,
-            p_nom=load_mw.reindex(columns=shedding_zones, fill_value=0.0).max().to_numpy(),
+            p_nom=peak.to_numpy(),
+            p_max_pu=sheddable.div(peak.where(peak > 0, 1.0)).add_prefix(_SHEDDING_PREFIX),
             marginal_cost=load_shedding_cost,
         )
 
