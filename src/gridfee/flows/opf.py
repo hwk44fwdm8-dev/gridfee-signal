@@ -255,6 +255,7 @@ def _solve(n: pypsa.Network) -> None:
             status, condition = n.optimize(
                 solver_name="highs",
                 assign_all_duals=True,
+                progress=False,
                 solver_options={"output_flag": False, "log_to_console": False},
             )
     finally:

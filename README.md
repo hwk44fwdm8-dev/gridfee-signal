@@ -9,10 +9,16 @@ network of Germany and turns it into a fee signal with a relief credit for stora
 charges during congestion. It is meant for historical backcasts and for forward-looking
 scenarios driven by user-supplied inputs.
 
-**Status: milestone 2 of 6.** The network loader, the DC OPF runner, the SMARD collector
-and historical injections are in place. The fee signal, validation and scenarios are not
-built yet, and the repository ships the 22 zones of Germany but not yet the lines between
-them (see [Roadmap](#roadmap)).
+**Status: milestone 3 of 6.** The network loader, the DC OPF runner, the SMARD collector,
+historical injections, the fee signal and the validation are in place, so a historical
+backcast runs end to end. Scenarios and dispatch are not built yet (see
+[Roadmap](#roadmap)).
+
+**Read before using results:** the lines between the 22 zones are an assumption derived
+from open data ([docs/NETWORK.md](docs/NETWORK.md)), and the shares that place load and
+generation in the zones are placeholders. With both, the 2023 backcast finds no
+congestion between German zones and a neutral fee signal everywhere
+([docs/METHODOLOGY.md](docs/METHODOLOGY.md)).
 
 ## Quick start
 
@@ -58,11 +64,11 @@ flowchart LR
     data --> inj[injections: historical]
     scen[scenario YAML + profiles] -.-> dispatch[dispatch]
     network --> flows[flows: DC OPF, PyPSA + HiGHS]
-    inj -.-> flows
+    inj --> flows
     dispatch -.-> flows
     flows --> out[shadow prices + PTDF]
-    out -.-> signal[signal: fee per zone and hour]
-    signal -.-> validation[validation and comparison]
+    out --> signal[signal: fee per zone and hour]
+    signal --> validation[validation against SMARD]
 ```
 
 Solid arrows exist today; dashed ones are planned.
@@ -92,11 +98,27 @@ Read [docs/DATA.md](docs/DATA.md) before using the output. In short:
 - **Shares are placeholders.** No share files ship yet, so every zone of a TSO zone gets
   the same share. The output flags this (`shares.csv`, column `placeholder`, and a
   warning). Placeholder results do not show where power is produced or used.
-- **The 22 zones have no lines yet**, so they cannot be run through the OPF.
 - **Four zones' TSO differs from the drafts** and several zones are split between two
   TSOs; see [TSO_SOURCES.md](data/networks/de22/TSO_SOURCES.md).
-- **Cross-border flows are collected but not used yet**: boundary zones get them once
-  the 22-zone network has lines.
+
+## Backcast, fee signal and validation
+
+```bash
+gridfee collect --year 2023
+gridfee backcast --year 2023          # writes results/backcast_2023/
+```
+
+`backcast` builds the injections, solves the DC OPF for every hour on
+`data/networks/de22`, and writes flows, shadow prices, the fee signal
+(`fee_signal.csv`, `fee_signal_class.csv`, `--format parquet` with
+`pip install -e ".[parquet]"`) and `validation.md`. The full year takes about two
+minutes. `gridfee signal --results <dir>` computes the signal from the output of
+`gridfee run`, and `gridfee validate --results <dir> --year 2023` repeats the checks (into
+`revalidation.md`).
+
+A **positive** signal means that feeding in at the zone adds to congestion and taking
+power out (charging a battery) relieves it; **negative** is the reverse. Method, sign
+convention, what is observed and what is assumed: [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
 
 ## Network config
 
@@ -135,7 +157,9 @@ from PyPSA-Eur.
   when congested the other way, 0 when not congested.
 - **Nodal price**: `price[n] - price[m] = -sum over lines l of (PTDF[l,n] - PTDF[l,m]) * shadow_price[l]`.
 
-The sign convention of the fee signal itself is set in milestone 3.
+- **Fee signal** (zone z): `sum over lines l of PTDF[l,z] * shadow_price[l]`, the nodal
+  price at the PTDF reference minus the nodal price of z. Positive: feeding in adds to
+  congestion, taking out relieves it.
 
 ## Limitations
 
@@ -143,7 +167,12 @@ The sign convention of the fee signal itself is set in milestone 3.
 - DC (linear) approximation: no losses, no reactive power, no voltage limits.
 - The hours of an OPF run are independent of each other.
 
-`METHODOLOGY.md`, `SCENARIOS.md` and `LIMITATIONS.md` follow with the modules they describe.
+- The 22-zone lines are an assumption derived from OpenStreetMap-based data, and DC
+  cables are treated as lines; see [docs/NETWORK.md](docs/NETWORK.md).
+- The backcast is not a market model, and its zone shares are placeholders; see
+  [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
+
+`SCENARIOS.md` and `LIMITATIONS.md` follow with the modules they describe.
 
 ## Roadmap
 
@@ -151,11 +180,12 @@ The sign convention of the fee signal itself is set in milestone 3.
 | --- | --- | --- |
 | M1 | scaffold, network loader, DC OPF runner, synthetic-network tests, CI | done |
 | M2 | SMARD collector, historical injections, energy-balance checks | done |
-| M3 | fee signal and validation; 2023 backcast end to end | planned |
+| M3 | fee signal and validation; 2023 backcast end to end | done |
 | M4 | scenario schema, profile import, dispatch, scenario runner | planned |
 | M5 | sensitivity runs, scenario comparison, CLI polish, docs | planned |
 | M6 | BESS impact module, dashboard (stretch) | planned |
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). The derived network data is under the ODbL, see
+[LICENSE-DATA.md](LICENSE-DATA.md).

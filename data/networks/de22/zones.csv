@@ -2,27 +2,40 @@
 # (dso-grid-fee-model-first-drafts, "Build population load shares.py").
 # tso_zone is the TSO whose control area covers most of the zone; each one was
 # checked against a public source, see TSO_SOURCES.md next to this file.
-# There is no lines.csv yet: no sourced line susceptances or capacities exist.
-zone_id,name,kind,tso_zone
-DE01,Berlin,internal,50Hertz
-DE02,Brandenburg,internal,50Hertz
-DE03,Mecklenburg-Vorpommern,internal,50Hertz
-DE04,Sachsen,internal,50Hertz
-DE05,Sachsen-Anhalt,internal,50Hertz
-DE06,Thüringen,internal,50Hertz
-DE07,Hamburg/Schleswig-Holstein,internal,TenneT
-DE08,Niedersachsen-Nord,internal,TenneT
-DE09,Niedersachsen-Süd,internal,TenneT
-DE10,NRW-Nord/Ost,internal,Amprion
-DE11,NRW-West,internal,Amprion
-DE12,Bayern-Nord,internal,TenneT
-DE13,Bayern-Mitte,internal,TenneT
-DE14,Bayern-Süd/West,internal,TenneT
-DE15,Bremen,internal,TenneT
-DE16,Hessen,internal,TenneT
-DE17,Rheinland-Pfalz,internal,Amprion
-DE18,Saarland,internal,Amprion
-DE19,BW-Stuttgart,internal,TransnetBW
-DE20,BW-Karlsruhe,internal,TransnetBW
-DE21,BW-Freiburg,internal,TransnetBW
-DE22,BW-Tübingen,internal,TransnetBW
+# The boundary zones and all coordinates are written by scripts/derive_de22_network.py
+# (mean position of the PyPSA-Eur buses of the zone); see docs/NETWORK.md.
+zone_id,name,kind,tso_zone,country,lat,lon
+DE01,Berlin,internal,50Hertz,,52.552,13.414
+DE02,Brandenburg,internal,50Hertz,,52.551,13.39
+DE03,Mecklenburg-Vorpommern,internal,50Hertz,,53.934,12.891
+DE04,Sachsen,internal,50Hertz,,51.032,13.174
+DE05,Sachsen-Anhalt,internal,50Hertz,,52.012,11.866
+DE06,Thüringen,internal,50Hertz,,50.835,11.445
+DE07,Hamburg/Schleswig-Holstein,internal,TenneT,,54.103,9.658
+DE08,Niedersachsen-Nord,internal,TenneT,,53.108,8.24
+DE09,Niedersachsen-Süd,internal,TenneT,,52.27,9.836
+DE10,NRW-Nord/Ost,internal,Amprion,,51.666,7.602
+DE11,NRW-West,internal,Amprion,,51.213,6.759
+DE12,Bayern-Nord,internal,TenneT,,49.759,10.952
+DE13,Bayern-Mitte,internal,TenneT,,48.338,12.087
+DE14,Bayern-Süd/West,internal,TenneT,,48.208,10.389
+DE15,Bremen,internal,TenneT,,53.134,8.677
+DE16,Hessen,internal,TenneT,,50.296,8.716
+DE17,Rheinland-Pfalz,internal,Amprion,,49.946,7.399
+DE18,Saarland,internal,Amprion,,49.336,6.973
+DE19,BW-Stuttgart,internal,TransnetBW,,48.883,9.334
+DE20,BW-Karlsruhe,internal,TransnetBW,,49.194,8.617
+DE21,BW-Freiburg,internal,TransnetBW,,47.903,8.143
+DE22,BW-Tübingen,internal,TransnetBW,,48.151,9.542
+AT,Austria,boundary,,AT,47.578,11.272
+BE,Belgium,boundary,,BE,50.753,5.668
+CH,Switzerland,boundary,,CH,47.551,8.064
+CZ,Czechia,boundary,,CZ,50.155,13.29
+DK1,Denmark West,boundary,,DK,54.974,9.096
+DK2,Denmark East,boundary,,DK,55.45,12.008
+FR,France,boundary,,FR,48.692,6.877
+LU,Luxembourg,boundary,,LU,49.842,6.144
+NL,Netherlands,boundary,,NL,52.126,6.47
+NO2,Norway (NO2),boundary,,NO,58.669,6.754
+PL,Poland,boundary,,PL,52.144,14.795
+SE4,Sweden (SE4),boundary,,SE,55.501,13.146
