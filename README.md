@@ -74,11 +74,13 @@ gridfee collect --year 2023 --reference data/reference/annual_totals.csv
 gridfee injections --zones data/networks/de22/zones.csv --year 2023
 ```
 
-`collect` downloads hourly load, onshore wind, offshore wind and solar per TSO zone, and
-national load and generation by fuel, from [SMARD](https://www.smard.de) (public, no key)
+`collect` downloads hourly load, onshore wind, offshore wind and solar per TSO zone,
+national load and generation by fuel, and physical cross-border flows per TSO zone and
+neighbour, from [SMARD](https://www.smard.de) (public, no key)
 into `data/raw/`. Downloads are cached in `data/cache/smard/`. Hours are Europe/Berlin.
-Runs of up to 3 missing hours are interpolated and logged; longer gaps stop the run.
-With `--reference`, annual totals are compared with published figures (±5 %).
+Runs of up to 3 missing hours are interpolated and logged; longer gaps stop the run
+(in cross-border series they stay missing and are reported).
+With `--reference`, annual totals are compared with Bundesnetzagentur figures (±5 %).
 
 `injections` splits each TSO zone's series over its zones: demand by population share,
 wind and solar by capacity share (`--population-shares`, `--capacity-shares`). It writes
@@ -93,7 +95,8 @@ Read [docs/DATA.md](docs/DATA.md) before using the output. In short:
 - **The 22 zones have no lines yet**, so they cannot be run through the OPF.
 - **Four zones' TSO differs from the drafts** and several zones are split between two
   TSOs; see [TSO_SOURCES.md](data/networks/de22/TSO_SOURCES.md).
-- **Cross-border flows are not collected**: SMARD documents no filter for them.
+- **Cross-border flows are collected but not used yet**: boundary zones get them once
+  the 22-zone network has lines.
 
 ## Network config
 

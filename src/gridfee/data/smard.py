@@ -1,10 +1,13 @@
 """Collector for SMARD, the public market data platform of the Bundesnetzagentur.
 
-The API needs no key. Filter ids and region codes below are the ones listed in
-the bundesAPI/smard-api documentation
-(https://github.com/bundesAPI/smard-api, ``openapi.yaml``); ids that are not
-documented there are deliberately not used. SMARD has no documented filter for
-cross-border flows, so those are not collected here.
+The API needs no key. Load and generation filter ids and the region codes are
+the ones listed in the bundesAPI/smard-api documentation
+(https://github.com/bundesAPI/smard-api, ``openapi.yaml``). That documentation
+lists no cross-border series, so the ids for those are taken from the
+configuration file SMARD's own chart application reads
+(https://www.smard.de/app/chart_configuration/market_data_configuration.json),
+which names every series and the regions it exists for. Ids in neither source
+are not used.
 
 Hourly values are the energy of the hour in MWh, which equals the mean power in
 MW. Hours are returned on a Europe/Berlin index.
@@ -14,7 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 
 import pandas as pd
@@ -47,6 +50,61 @@ TSO_RES_FILTERS: dict[str, int] = {
     name: GENERATION_FILTERS[name] for name in ("wind_onshore", "wind_offshore", "solar")
 }
 SMARD_REGIONS = ("DE", *TSO_ZONES)
+
+# "Physikalischer Stromfluss" in SMARD's market_data_configuration.json: for each
+# TSO zone and neighbouring area, the ids of "<area> (Export)" and "<area> (Import)".
+# Export values are >= 0 and import values <= 0, both from Germany's point of view.
+PHYSICAL_FLOW_FILTERS: dict[str, dict[str, tuple[int, int]]] = {
+    "50Hertz": {
+        "DK2": (4752, 4894),  # Dänemark 2
+        "PL": (4753, 4895),  # Polen
+        "CZ": (4754, 4896),  # Tschechien
+    },
+    "Amprion": {
+        "FR": (4755, 4897),  # Frankreich
+        "LU": (4756, 4898),  # Luxemburg
+        "NL": (4757, 4899),  # Niederlande
+        "AT": (4759, 4900),  # Österreich
+        "CH": (4760, 4901),  # Schweiz
+        "BE": (4968, 4970),  # Belgien
+    },
+    "TenneT": {
+        "DK1": (4761, 4902),  # Dänemark 1
+        "NL": (4762, 4903),  # Niederlande
+        "AT": (4763, 4904),  # Österreich
+        "SE4": (4764, 4905),  # Schweden 4
+        "CZ": (4765, 4906),  # Tschechien
+        "NO2": (4964, 4966),  # Norwegen (the NordLink cable to bidding zone NO2)
+    },
+    "TransnetBW": {
+        "FR": (4766, 4907),  # Frankreich
+        "AT": (4767, 4908),  # Österreich
+        "CH": (4768, 4909),  # Schweiz
+    },
+}
+# Germany's net export, same configuration file.
+NET_EXPORT_FILTERS: dict[str, int] = {
+    "physical": 4963,  # Physikalischer Nettoexport
+    "commercial": 4629,  # Kommerzieller Nettoexport
+}
+
+# How BNetzA's annual review groups the generation filters.
+RENEWABLE_FUELS = ("biomass", "hydro", "wind_offshore", "wind_onshore", "solar", "other_renewable")
+
+_VERIFIED_REQUESTS: frozenset[tuple[int, str]] = frozenset(
+    [
+        (filter_id, region)
+        for filter_id in (*GENERATION_FILTERS.values(), LOAD_FILTER)
+        for region in SMARD_REGIONS
+    ]
+    + [
+        (filter_id, tso)
+        for tso, borders in PHYSICAL_FLOW_FILTERS.items()
+        for pair in borders.values()
+        for filter_id in pair
+    ]
+    + [(filter_id, "DE") for filter_id in NET_EXPORT_FILTERS.values()]
+)
 
 _WEEK_MS = 7 * 24 * 3600 * 1000
 
@@ -139,11 +197,15 @@ class SmardClient:
         return payload
 
 
-def fill_gaps(series: pd.Series, max_gap_hours: int, label: str) -> tuple[pd.Series, int]:
+def fill_gaps(
+    series: pd.Series, max_gap_hours: int, label: str, keep_long_gaps: bool = False
+) -> tuple[pd.Series, int]:
     """Interpolate runs of up to ``max_gap_hours`` missing hours linearly and log them.
 
-    Longer runs, and gaps at either end of the series, raise :class:`SmardError`:
-    they are too long to bridge without making data up.
+    Longer runs, and gaps at either end of the series, are too long to bridge
+    without making data up: they raise :class:`SmardError`, or with
+    ``keep_long_gaps`` stay missing and are logged. Returns the series and the
+    number of hours filled.
     """
     missing = series.isna()
     if not missing.any():
@@ -151,23 +213,30 @@ def fill_gaps(series: pd.Series, max_gap_hours: int, label: str) -> tuple[pd.Ser
     if missing.all():
         raise SmardError(f"{label}: SMARD has no values in the requested period")
     run_id = (missing != missing.shift()).cumsum()
-    runs = missing[missing].groupby(run_id[missing]).agg(["size"])["size"]
-    first = series.index[missing][0]
-    if runs.max() > max_gap_hours or missing.iloc[0] or missing.iloc[-1]:
-        raise SmardError(
-            f"{label}: {int(missing.sum())} missing hours in {len(runs)} gaps, the longest "
-            f"{int(runs.max())} h (first at {first}); gaps longer than {max_gap_hours} h or at "
-            "the edge of the period are not filled"
+    run_length = missing.groupby(run_id).transform("size")
+    at_edge = run_id.isin([run_id.iloc[0], run_id.iloc[-1]])
+    unfillable = missing & ((run_length > max_gap_hours) | at_edge)
+    fillable = missing & ~unfillable
+    if unfillable.any():
+        message = (
+            f"{label}: {int(unfillable.sum())} missing hours in "
+            f"{run_id[unfillable].nunique()} gaps that are longer than {max_gap_hours} h or at "
+            f"the edge of the period (first at {series.index[unfillable][0]}) are not filled"
         )
-    filled = series.interpolate(method="linear")
+        if not keep_long_gaps:
+            raise SmardError(message)
+        logger.warning("%s; they stay missing", message)
+    if not fillable.any():
+        return series, 0
+    filled = series.interpolate(method="linear").mask(unfillable)
     logger.warning(
         "%s: filled %d missing hours in %d gaps by linear interpolation (first at %s)",
         label,
-        int(missing.sum()),
-        len(runs),
-        first,
+        int(fillable.sum()),
+        run_id[fillable].nunique(),
+        series.index[fillable][0],
     )
-    return filled, int(missing.sum())
+    return filled, int(fillable.sum())
 
 
 def collect_year(
@@ -180,9 +249,16 @@ def collect_year(
 
     Tables (hours x columns, MW): ``load_tso``, ``wind_onshore_tso``,
     ``wind_offshore_tso``, ``solar_tso`` (one column per TSO zone), ``load_de`` and
-    ``generation_de`` (one column per fuel). ``gaps`` lists the hours filled per
-    series. A TSO zone for which SMARD has no values at all for a technology
-    (offshore wind in a zone without a coast) is left out of that table.
+    ``generation_de`` (one column per fuel), ``physical_flows_tso`` (one column
+    ``<TSO zone>_<neighbour>`` per border, net export) and ``net_export_de``
+    (``physical`` and ``commercial``). ``gaps`` lists the hours filled and the
+    hours still missing per series. A TSO zone for which SMARD has no values at
+    all for a technology (offshore wind in a zone without a coast) is left out of
+    that table.
+
+    Load and generation gaps too long to fill stop the run. Cross-border series
+    keep such gaps as missing values instead: SMARD has them in most years, and
+    nothing downstream reads these tables yet.
     """
     client = client or SmardClient()
     out_dir = Path(out_dir)
@@ -191,19 +267,35 @@ def collect_year(
     end = pd.Timestamp(year=year + 1, month=1, day=1, tz=TIMEZONE)
     gaps: list[dict] = []
 
+    def series(filter_id: int, region: str, keep_long_gaps: bool = False) -> pd.Series:
+        label = f"filter {filter_id} / {region} / {year}"
+        raw = client.fetch_hourly(filter_id, region, start, end)
+        filled, count = fill_gaps(raw, max_gap_hours, label, keep_long_gaps)
+        gaps.append(
+            {
+                "filter_id": filter_id,
+                "region": region,
+                "filled_hours": count,
+                "missing_hours": int(filled.isna().sum()),
+            }
+        )
+        return filled
+
     def table(columns: Mapping[str, tuple[int, str]], optional: bool = False) -> pd.DataFrame:
         frame = {}
         for column, (filter_id, region) in columns.items():
-            label = f"filter {filter_id} / {region} / {year}"
             try:
-                raw = client.fetch_hourly(filter_id, region, start, end)
+                frame[column] = series(filter_id, region)
             except SmardNoDataError:
                 if not optional:
                     raise
-                logger.warning("%s: SMARD has no such series, column %r left out", label, column)
-                continue
-            frame[column], filled = fill_gaps(raw, max_gap_hours, label)
-            gaps.append({"filter_id": filter_id, "region": region, "filled_hours": filled})
+                logger.warning(
+                    "filter %d / %s / %d: SMARD has no such series, column %r left out",
+                    filter_id,
+                    region,
+                    year,
+                    column,
+                )
         return pd.DataFrame(frame)
 
     tables = {"load_tso": table({tso: (LOAD_FILTER, tso) for tso in TSO_ZONES})}
@@ -211,6 +303,17 @@ def collect_year(
         tables[f"{tech}_tso"] = table({tso: (filter_id, tso) for tso in TSO_ZONES}, optional=True)
     tables["load_de"] = table({"load": (LOAD_FILTER, "DE")})
     tables["generation_de"] = table({fuel: (fid, "DE") for fuel, fid in GENERATION_FILTERS.items()})
+    # Imports are <= 0, so export + import is the net export over the border.
+    tables["physical_flows_tso"] = pd.DataFrame(
+        {
+            f"{tso}_{neighbour}": series(export_id, tso, True) + series(import_id, tso, True)
+            for tso, borders in PHYSICAL_FLOW_FILTERS.items()
+            for neighbour, (export_id, import_id) in borders.items()
+        }
+    )
+    tables["net_export_de"] = pd.DataFrame(
+        {name: series(fid, "DE", True) for name, fid in NET_EXPORT_FILTERS.items()}
+    )
     tables["gaps"] = pd.DataFrame(gaps)
 
     for name, frame in tables.items():
@@ -230,6 +333,23 @@ def read_table(directory: str | Path, name: str, year: int) -> pd.DataFrame:
     frame = pd.read_csv(path, index_col=0)
     frame.index = pd.to_datetime(frame.index, utc=True).tz_convert(TIMEZONE).rename("hour")
     return frame
+
+
+def annual_check_series(tables: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
+    """National hourly series (MW) that published annual figures exist for.
+
+    The fuels of ``generation_de``, ``load``, the sums ``generation_total``,
+    ``renewables`` and ``conventional``, and ``commercial_net_export``.
+    """
+    generation = tables["generation_de"]
+    renewable = [fuel for fuel in generation.columns if fuel in RENEWABLE_FUELS]
+    return generation.assign(
+        load=tables["load_de"]["load"],
+        generation_total=generation.sum(axis=1),
+        renewables=generation[renewable].sum(axis=1),
+        conventional=generation.drop(columns=renewable).sum(axis=1),
+        commercial_net_export=tables["net_export_de"]["commercial"],
+    )
 
 
 def check_annual_totals(
@@ -271,11 +391,12 @@ def read_reference_totals(path: str | Path, year: int) -> dict[str, float]:
 
 
 def _check_request(filter_id: int, region: str) -> None:
-    known: Iterable[int] = (*GENERATION_FILTERS.values(), LOAD_FILTER)
-    if filter_id not in known:
-        raise ValueError(f"filter id {filter_id} is not one of the verified SMARD filters")
     if region not in SMARD_REGIONS:
         raise ValueError(f"region {region!r} is not one of {SMARD_REGIONS}")
+    if (filter_id, region) not in _VERIFIED_REQUESTS:
+        raise ValueError(
+            f"filter id {filter_id} is not one of the verified SMARD filters for {region}"
+        )
 
 
 def _to_berlin(timestamp: pd.Timestamp) -> pd.Timestamp:
