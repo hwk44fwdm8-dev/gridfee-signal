@@ -187,7 +187,10 @@ def signal(
     """Compute the fee signal per zone and hour from shadow prices and the PTDF."""
     try:
         shadow_prices = _read_hourly(results / "shadow_prices.csv")
-        ptdf = pd.read_csv(results / "ptdf.csv", index_col=0, dtype={0: str})
+        # keep_default_na: a line may be called "NA".
+        ptdf = pd.read_csv(
+            results / "ptdf.csv", index_col=0, dtype={0: str}, keep_default_na=False
+        ).astype(float)
         result = compute_fee_signal(shadow_prices, ptdf, threshold)
         paths = write_signal(result, out or results, file_format)
     except (SignalError, OSError, ValueError) as err:
@@ -211,7 +214,11 @@ def validate(
     flow_tolerance: float = typer.Option(
         0.10, help="Allowed deviation of the net export per neighbour."
     ),
-    out: Path | None = typer.Option(None, help="Report file (default: validation.md in results)."),
+    out: Path | None = typer.Option(
+        None,
+        help="Report file, not .csv (default: revalidation.md in results; the report of "
+        "`gridfee backcast`, with its notes on placeholders, stays as it is).",
+    ),
 ) -> None:
     """Check backcast results against SMARD data and write a Markdown report."""
     try:
@@ -226,8 +233,8 @@ def validate(
             year,
             wind_tolerance,
             flow_tolerance,
-            out or results / "validation.md",
-            [],
+            out or results / "revalidation.md",
+            [f"Written by `gridfee validate` from the results in {results}."],
         )
     except (NetworkConfigError, ValidationError, smard.SmardError, OSError, ValueError) as err:
         typer.secho(f"Error: {err}", fg=typer.colors.RED, err=True)
@@ -437,6 +444,8 @@ def _validate(
         wind_tolerance,
         flow_tolerance,
     )
+    if report.suffix.lower() == ".csv":
+        raise ValueError(f"{report}: the report is Markdown; its checks go to a .csv next to it")
     write_report(checks, report, f"Validation of the {year} backcast against SMARD", notes)
     checks.to_csv(report.with_suffix(".csv"), index=False)
     return checks, report
@@ -458,7 +467,13 @@ def _finish_validation(checks: pd.DataFrame, report: Path) -> None:
 
 def _read_berlin_hours(path: Path) -> pd.DataFrame:
     """Read a CSV whose first column holds hours with a UTC offset, as Europe/Berlin."""
-    frame = pd.read_csv(path, index_col=0)
+    frame = pd.read_csv(path, index_col=0, dtype={0: str})
+    without_offset = [hour for hour in frame.index if pd.Timestamp(hour).tzinfo is None]
+    if without_offset:
+        raise ValueError(
+            f"{path}: hours need a UTC offset, e.g. 2023-01-01T00:00:00+01:00; "
+            f"got {without_offset[0]!r}"
+        )
     frame.index = pd.to_datetime(frame.index, utc=True).tz_convert(smard.TIMEZONE)
     return frame
 

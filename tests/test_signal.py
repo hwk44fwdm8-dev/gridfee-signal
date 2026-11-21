@@ -158,3 +158,18 @@ def test_write_signal(tmp_path, file_format):
 def test_unknown_format_is_rejected(tmp_path):
     with pytest.raises(SignalError, match="format"):
         write_signal(compute_fee_signal(SHADOW, PTDF), tmp_path, "xlsx")
+
+
+def test_cli_signal_accepts_a_line_called_na(tmp_path):
+    from typer.testing import CliRunner
+
+    from gridfee.cli import app
+
+    (tmp_path / "shadow_prices.csv").write_text("snapshot,NA\nh1,40.0\n")
+    (tmp_path / "ptdf.csv").write_text("line_id,A,B\nNA,0.0,-1.0\n")
+
+    result = CliRunner().invoke(app, ["signal", "--results", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    signal = pd.read_csv(tmp_path / "fee_signal.csv", index_col=0)
+    assert signal.loc["h1"].tolist() == [0.0, -40.0]

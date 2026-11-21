@@ -113,7 +113,8 @@ gridfee backcast --year 2023          # writes results/backcast_2023/
 (`fee_signal.csv`, `fee_signal_class.csv`, `--format parquet` with
 `pip install -e ".[parquet]"`) and `validation.md`. The full year takes about two
 minutes. `gridfee signal --results <dir>` computes the signal from the output of
-`gridfee run`, and `gridfee validate --results <dir> --year 2023` repeats the checks.
+`gridfee run`, and `gridfee validate --results <dir> --year 2023` repeats the checks (into
+`revalidation.md`).
 
 A **positive** signal means that feeding in at the zone adds to congestion and taking
 power out (charging a battery) relieves it; **negative** is the reverse. Method, sign

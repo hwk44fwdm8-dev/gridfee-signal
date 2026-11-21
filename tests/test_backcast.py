@@ -123,6 +123,27 @@ def test_given_residual_shares_are_used_and_checked():
         _inputs(residual_shares=pd.Series({"N": 0.5, "S": 0.6}))
     with pytest.raises(BackcastError, match="every internal zone"):
         _inputs(residual_shares=pd.Series({"S": 1.0}))
+    with pytest.raises(BackcastError, match="without a share"):
+        _inputs(residual_shares=pd.Series({"N": float("nan"), "S": 1.0}))
+
+
+def test_residual_capacity_uses_the_peak_of_a_left_out_hour():
+    flows = FLOWS.copy()
+    flows.iloc[2, 0] = float("nan")  # the hour with the highest other generation
+    zonal = build_historical_injections(NETWORK.zones[:2], TSO_LOAD, TSO_RES)
+
+    inputs = build_backcast_inputs(NETWORK, zonal, GENERATION, flows)
+
+    assert inputs.generators.loc["residual:S", "p_nom_mw"] == pytest.approx(150.0)
+
+
+def test_without_any_flow_observation_the_exchange_is_zero():
+    zonal = build_historical_injections(NETWORK.zones[:2], TSO_LOAD, TSO_RES)
+
+    inputs = build_backcast_inputs(NETWORK, zonal, GENERATION, FLOWS * float("nan"))
+
+    assert len(inputs.skipped_hours) == 0
+    assert list(inputs.load_mw.columns) == ["N", "S"]
 
 
 def test_unknown_neighbour_and_mismatched_hours_are_rejected():
@@ -225,6 +246,42 @@ def test_cli_backcast_runs_end_to_end(tmp_path):
     labels = pd.read_csv(tmp_path / "s" / "fee_signal_class.csv", index_col=0)
     # `signal` uses the PTDF as written, all zones included.
     assert labels.iloc[1][["N", "S"]].tolist() == [POSITIVE, NEUTRAL]
+
+
+def test_cli_backcast_rejects_hours_without_utc_offset(tmp_path):
+    _write_tables(tmp_path / "raw")
+    _write_network(tmp_path / "net")
+    (tmp_path / "hours.csv").write_text("hour\n2023-01-01 01:00:00\n")
+
+    result = CliRunner().invoke(
+        app,
+        ["backcast", "--year", "2023", "--network", str(tmp_path / "net"), "--data"]
+        + [str(tmp_path / "raw"), "--hours", str(tmp_path / "hours.csv")]
+        + ["--out", str(tmp_path / "out")],
+    )
+
+    assert result.exit_code == 1
+    assert "hours need a UTC offset" in result.output
+
+
+def test_cli_validate_keeps_the_backcast_report_and_rejects_csv(tmp_path):
+    _write_tables(tmp_path / "raw")
+    _write_network(tmp_path / "net")
+    out = tmp_path / "out"
+    common = ["--year", "2023", "--network", str(tmp_path / "net"), "--data", str(tmp_path / "raw")]
+    CliRunner().invoke(app, ["backcast", *common, "--out", str(out)])
+    report = (out / "validation.md").read_text(encoding="utf-8")
+
+    CliRunner().invoke(app, ["validate", "--results", str(out), *common])
+    as_csv = CliRunner().invoke(
+        app, ["validate", "--results", str(out), *common, "--out", str(tmp_path / "r.csv")]
+    )
+
+    assert (out / "validation.md").read_text(encoding="utf-8") == report
+    assert (out / "revalidation.md").exists()
+    assert as_csv.exit_code == 1
+    assert "the report is Markdown" in as_csv.output
+    assert not (tmp_path / "r.csv").exists()
 
 
 def test_cli_backcast_reports_missing_data(tmp_path):
