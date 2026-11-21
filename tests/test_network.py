@@ -104,3 +104,24 @@ def test_ids_keep_leading_zeros_and_parallel_lines_are_allowed(tmp_path):
     assert network.line_ids == ["a", "b"]
     assert network.zones[0].lat == 53.5
     assert network.zones[1].lat is None
+
+
+def test_error_line_number_counts_comments_and_blank_lines(tmp_path):
+    lines = "# comment\n\n" + LINES_HEADER + "A-B,A,B,100,1000\n# note\n\nB-C,B,C,abc,1000\n"
+    with pytest.raises(NetworkConfigError, match=r"lines\.csv, line 7"):
+        load_network(_network_dir(tmp_path, lines=lines))
+
+
+def test_rejects_extra_values_and_duplicate_columns(tmp_path):
+    with pytest.raises(NetworkConfigError, match=r"line 2: 6 values for 5 columns"):
+        load_network(_network_dir(tmp_path, lines=LINES_HEADER + "A-B,A,B,100,1000,7\n"))
+    with pytest.raises(NetworkConfigError, match="at most once"):
+        load_network(_network_dir(tmp_path, lines="line_id," + LINES_HEADER))
+
+
+def test_quoted_values_and_empty_file(tmp_path):
+    zones = ZONES_HEADER + 'A,"Zone A, north",internal,TenneT,,,\n'
+    network = load_network(_network_dir(tmp_path, zones=zones, lines=LINES_HEADER))
+    assert network.zones[0].name == "Zone A, north"
+    with pytest.raises(NetworkConfigError, match="no header row"):
+        load_network(_network_dir(tmp_path, zones="# only a comment\n"))

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
-import pandas as pd
 from pydantic import ValidationError
 
 from gridfee.network.schema import Line, Zone, ZoneNetwork
@@ -31,25 +31,38 @@ def _read_records(path: Path, model: type[Zone] | type[Line]) -> list[Zone] | li
     if not path.is_file():
         raise NetworkConfigError(f"missing network config file: {path}")
 
-    # Read everything as text so that ids such as "01" keep their leading zeros;
-    # pydantic then parses the numeric columns.
-    frame = pd.read_csv(path, dtype=str, keep_default_na=False, comment="#", skipinitialspace=True)
-    frame.columns = [c.strip() for c in frame.columns]
+    # Parsed by hand rather than with pandas: every value stays text (ids such as
+    # "01" keep their leading zeros, pydantic parses the numbers) and errors can
+    # name the line in the file even when comments or blank lines precede it.
+    with path.open(newline="", encoding="utf-8-sig") as file:
+        rows = [
+            (number, next(csv.reader([text], skipinitialspace=True)))
+            for number, text in enumerate(file.read().splitlines(), start=1)
+            if text.strip() and not text.lstrip().startswith("#")
+        ]
+    if not rows:
+        raise NetworkConfigError(f"{path}: file has no header row")
+    header = [column.strip() for column in rows[0][1]]
 
     fields = model.model_fields
     required = {name for name, info in fields.items() if info.is_required()}
-    missing = sorted(required - set(frame.columns))
-    unknown = sorted(set(frame.columns) - set(fields))
-    if missing or unknown:
+    missing = sorted(required - set(header))
+    unknown = sorted(set(header) - set(fields))
+    if missing or unknown or len(set(header)) != len(header):
         raise NetworkConfigError(
-            f"{path}: missing columns {missing}, unknown columns {unknown}; expected {list(fields)}"
+            f"{path}: missing columns {missing}, unknown columns {unknown}; "
+            f"expected each of {list(fields)} at most once"
         )
 
     records = []
-    for row_number, row in enumerate(frame.to_dict(orient="records"), start=2):
-        values = {k: v.strip() for k, v in row.items() if v.strip() != ""}
+    for number, cells in rows[1:]:
+        if len(cells) > len(header):
+            raise NetworkConfigError(
+                f"{path}, line {number}: {len(cells)} values for {len(header)} columns"
+            )
+        values = {k: v.strip() for k, v in zip(header, cells, strict=False) if v.strip() != ""}
         try:
             records.append(model(**values))
         except ValidationError as err:
-            raise NetworkConfigError(f"{path}, line {row_number}:\n{err}") from err
+            raise NetworkConfigError(f"{path}, line {number}:\n{err}") from err
     return records
