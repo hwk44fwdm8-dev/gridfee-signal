@@ -1,0 +1,6 @@
+# Synthetic test network. Not a model of any real grid.
+zone_id,name,kind,tso_zone,country,lat,lon
+A,Zone A,internal,50Hertz,,,
+B,Zone B,internal,TenneT,,,
+C,Zone C,internal,Amprion,,,
+X,Neighbour X,boundary,,XX,,

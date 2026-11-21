@@ -1,0 +1,6 @@
+# Synthetic test network. Not a model of any real grid.
+line_id,from_zone,to_zone,susceptance_mw_per_rad,capacity_mw
+A-B,A,B,100,1000
+B-C,B,C,100,1000
+A-C,A,C,100,50
+C-X,C,X,100,1000

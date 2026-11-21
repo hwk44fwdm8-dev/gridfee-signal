@@ -1,0 +1,3 @@
+generator_id,zone,p_nom_mw,marginal_cost_eur_per_mwh
+cheap_A,A,500,10
+costly_C,C,500,50

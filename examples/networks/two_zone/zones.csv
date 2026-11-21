@@ -1,0 +1,4 @@
+# Synthetic test network. Not a model of any real grid.
+zone_id,name,kind,tso_zone,country,lat,lon
+N,North,internal,50Hertz,,,
+S,South,internal,TenneT,,,
