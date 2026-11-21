@@ -109,6 +109,8 @@ def test_bad_inputs_are_rejected():
         build_historical_injections(ZONES, LOAD.iloc[:2], RES)
     with pytest.raises(ValueError, match="missing values"):
         build_historical_injections(ZONES, LOAD.mask(LOAD > 250), RES)
+    with pytest.raises(ValueError, match=r"no load series for TSO zones \['TenneT'\]"):
+        build_historical_injections(ZONES, LOAD[["Amprion"]], RES)
     with pytest.raises(ValueError, match="no zone belongs to TSO zone '50Hertz'"):
         build_historical_injections(ZONES, LOAD.assign(**{"50Hertz": 1.0}), RES)
 

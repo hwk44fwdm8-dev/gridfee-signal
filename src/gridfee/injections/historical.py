@@ -141,6 +141,11 @@ def build_historical_injections(
             raise ValueError(f"capacity shares for technologies without data: {unknown}")
 
     zone_ids = [zone.zone_id for zone in zones if zone.kind is ZoneKind.INTERNAL]
+    without_load = sorted(
+        {z.tso_zone for z in zones if z.kind is ZoneKind.INTERNAL} - set(tso_load_mw.columns)
+    )
+    if without_load:
+        raise ValueError(f"no load series for TSO zones {without_load}")
     share_frames = []
 
     def split(quantity: str, tso_mw: pd.DataFrame, given: pd.DataFrame | None) -> pd.DataFrame:
