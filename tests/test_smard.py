@@ -130,6 +130,13 @@ def test_last_hour_of_the_169_hour_week_is_found():
     assert series.tolist() == [168.0, 169.0]
 
 
+def test_empty_index_gives_missing_hours():
+    series = SmardClient(session=FakeSession(FIRST, 0)).fetch_hourly(
+        410, "DE", pd.Timestamp("2023-01-01"), pd.Timestamp("2023-01-02")
+    )
+    assert len(series) == 24 and series.isna().all()
+
+
 def test_cache_avoids_second_download(tmp_path):
     session = FakeSession(FIRST, 3)
     args = (4068, "Amprion", pd.Timestamp("2023-01-01"), pd.Timestamp("2023-01-05"))

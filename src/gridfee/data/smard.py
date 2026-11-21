@@ -99,7 +99,7 @@ class SmardClient:
         start_ms, end_ms = _to_ms(start), _to_ms(end)
         # A chunk runs until the next one starts (a week, 167 or 169 hours).
         chunk_starts = sorted(chunk_starts)
-        chunk_ends = [*chunk_starts[1:], float("inf")]
+        chunk_ends = [*chunk_starts[1:], float("inf")][: len(chunk_starts)]
         wanted = [
             first
             for first, last in zip(chunk_starts, chunk_ends, strict=True)
