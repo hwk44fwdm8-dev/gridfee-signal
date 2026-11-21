@@ -28,40 +28,75 @@ prices; multiplying all of them by the same factor changes nothing but the volta
 angles. For a single circuit with series reactance `x` (ohm) at nominal voltage `v_nom`
 (kV), `susceptance_mw_per_rad = v_nom**2 / x`.
 
-Boundary zones are ordinary buses connected by AC lines. HVDC interconnectors and other
-controllable links are not modelled yet.
+Boundary zones are ordinary buses connected by AC lines. HVDC links have no model of
+their own: `lines.csv` only knows AC-style lines (see below for how the shipped network
+treats them).
 
-## The 22-zone network of Germany
+## The 22-zone network of Germany (`data/networks/de22/`)
 
-The repository does not ship a network of Germany yet. Susceptances and capacities
-between zones must come from a documented source; none are made up here. The examples
-under `examples/networks/` are synthetic test networks.
+**The lines are an assumption, not TSO data.** They are derived from open data, by
+`scripts/derive_de22_network.py`, and have not been compared with the TSOs' own grid
+models. The examples under `examples/networks/` are synthetic test networks.
 
-## Optional: derive a zone network from PyPSA-Eur
+Sources:
 
-A zone network can be derived from a PyPSA-Eur network without making PyPSA-Eur a
-dependency of this tool. The steps below are a guide and have not been run against a
-PyPSA-Eur build in this repository; check the result before use.
+- **Grid:** PyPSA-Eur's prebuilt electricity network, version 0.8
+  (`buses.csv`, `lines.csv`, `links.csv` from
+  <https://data.pypsa.org/workflows/eur/osm/0.8/>, which PyPSA-Eur's `data/versions.csv`
+  lists as the archive of <https://zenodo.org/records/23896564>). It is built from
+  OpenStreetMap and licensed under the ODbL; see [LICENSE-DATA.md](../LICENSE-DATA.md).
+  PyPSA-Eur itself and its Snakemake workflow are not run.
+- **Zone shapes:** Eurostat GISCO NUTS 2021 regions, level 2, 1:1 million. The NUTS2
+  regions of each zone are in `zone_nuts2.csv` (from the owner's drafts). The shapes are
+  only used to place buses; they are not redistributed here.
 
-1. Build or download a PyPSA-Eur base network (the `.nc` file with the transmission
-   grid), outside of this tool.
-2. Create a busmap: a mapping from every PyPSA-Eur bus to a `zone_id`, for example by
-   a spatial join of the bus coordinates with the zone shapes, and to a boundary zone
-   per neighbouring country.
-3. Aggregate with PyPSA:
+Steps of the script:
 
-   ```python
-   import pypsa
-   from pypsa.clustering.spatial import get_clustering_from_busmap
+1. Keep buses, AC lines and DC links that are in service; drop AC below 220 kV (as
+   PyPSA-Eur does). Lines carry PyPSA-Eur's `x` (ohm) and `s_nom` (MVA), which it
+   computes from the voltage, the number of circuits and standard line types, not from
+   measured values.
+2. Busmap: each German bus goes to the zone whose NUTS2 region contains it (3 buses just
+   off the generalised coastline go to the nearest region). Foreign buses are used only
+   if a line or link from Germany ends there; they go to one boundary zone per
+   neighbouring area as SMARD names it (`DK1`/`DK2` split at 10.9° E, Norway as `NO2`,
+   Sweden as `SE4`). The neighbours' own grids are not modelled.
+3. `pypsa.clustering.spatial.get_clustering_from_busmap(n, busmap)` aggregates the AC
+   grid: lines inside a zone disappear, and all lines between two zones become one
+   equivalent line whose rating is the sum of the ratings and whose reactance is the
+   parallel combination, each line scaled to the distance between the zone centres.
+4. `susceptance_mw_per_rad = v_nom**2 / x` and
+   `capacity_mw = 0.7 * summed rating + rating of DC links`. The 0.7 is PyPSA-Eur's
+   default `s_max_pu`, its stand-in for the N-1 security margin.
+5. DC links between two zones (the cables to Norway, Sweden, Denmark East and Belgium;
+   none is in service between two German zones in this data) count with their full
+   rating. Where a link is the only connection of a boundary zone, the line's
+   susceptance has no effect and is set equal to the capacity. A link parallel to AC
+   lines would be treated as an AC line; the script warns, and it does not occur.
 
-   n = pypsa.Network("base.nc")
-   clustering = get_clustering_from_busmap(n, busmap)
-   lines = clustering.n.lines  # one aggregated line per pair of zones
-   ```
+`lines_parts.csv` lists the summed AC rating and DC rating behind each line.
 
-4. Write `lines.csv` from the aggregated lines: `from_zone = bus0`, `to_zone = bus1`,
-   `susceptance_mw_per_rad = v_nom**2 / x` and `capacity_mw = s_nom` (apply your own
-   security margin, e.g. PyPSA-Eur's `s_max_pu`).
+To rebuild (needs `pip install -e ".[derive]"` for geopandas):
 
-Aggregating parallel paths into one equivalent line per zone pair is an approximation;
-intra-zone congestion disappears.
+```bash
+python scripts/derive_de22_network.py --osm <dir with the three CSVs> \
+  --nuts NUTS_RG_01M_2021_4326_LEVL_2.geojson
+```
+
+Known weaknesses of the result:
+
+- **Capacities are generous.** Summing all circuits between two zones assumes they load
+  evenly, and congestion inside a zone disappears. The 2023 backcast finds no congested
+  line between German zones (with placeholder shares; see
+  [METHODOLOGY.md](METHODOLOGY.md)).
+- **Some interconnectors are too small.** Observed 2023 flows exceed the capacity to
+  Denmark East in 2,271 hours (up to 1,004 MW against the 600 MW of the one DC cable
+  in the data), and by a few percent to Sweden, Norway, Belgium and
+  France. The backcast cuts such flows to the capacity and reports it.
+- **OpenStreetMap is incomplete and unofficial**, and ratings come from standard line
+  types.
+- A zone belongs to one TSO in `zones.csv` although several zones are split between two
+  ([TSO_SOURCES.md](../data/networks/de22/TSO_SOURCES.md)).
+
+For your own network, `gridfee.network.pypsa_eur.derive_zone_lines(buses, lines, links,
+busmap)` does steps 3 to 5 for any busmap.

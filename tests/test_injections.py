@@ -186,7 +186,7 @@ def test_read_shares(tmp_path):
 
 
 def test_shipped_22_zones():
-    zones = load_zones(DE22)
+    zones = [zone for zone in load_zones(DE22) if zone.kind == "internal"]
     assert [zone.zone_id for zone in zones] == [f"DE{n:02d}" for n in range(1, 23)]
     by_tso: dict[str, list[str]] = {}
     for zone in zones:
