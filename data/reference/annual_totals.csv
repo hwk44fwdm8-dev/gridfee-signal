@@ -1,4 +1,16 @@
 # Published annual totals to check collected SMARD data against (gridfee collect).
 # Only figures read from the cited source are listed; add rows as more are verified.
+# Series: a fuel of the generation table, load, generation_total, renewables,
+# conventional (sums of fuels) or commercial_net_export.
+# Source "BNetzA 2024-01-03": Bundesnetzagentur, press release "Bundesnetzagentur
+# veröffentlicht Daten zum Strommarkt 2023", 3 January 2024,
+# https://www.bundesnetzagentur.de/SharedDocs/Pressemitteilungen/DE/2024/20240103_SMARD.html
 year,series,twh,source
-2023,wind_onshore,119.2,"Bundesnetzagentur, SMARD: Der Strommarkt im Jahr 2023 (2024-01-02), https://www.smard.de/page/home/topic-article/444/211756"
+2023,wind_onshore,118.7,"BNetzA 2024-01-03: Wind-Onshore-Erzeugung 118,7 TWh"
+2023,wind_offshore,23.5,"BNetzA 2024-01-03: Wind-Offshore 23,5 TWh"
+2023,solar,55.2,"BNetzA 2024-01-03: Photovoltaik 55,2 TWh"
+2023,renewables,251.2,"BNetzA 2024-01-03: Erzeugung aus erneuerbaren Energien 251,2 TWh"
+2023,conventional,197.2,"BNetzA 2024-01-03: Erzeugung aus konventionellen Energieträgern 197,2 TWh"
+2023,generation_total,448.5,"BNetzA 2024-01-03: (Netto-)Stromerzeugung 448,5 TWh"
+2023,load,456.8,"BNetzA 2024-01-03: Netzlast 456,8 TWh"
+2023,commercial_net_export,-11.7,"BNetzA 2024-01-03: kommerzieller Export 42,4 TWh minus Import 54,1 TWh"

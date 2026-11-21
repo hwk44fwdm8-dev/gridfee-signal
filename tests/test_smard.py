@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -87,7 +88,36 @@ def test_filter_ids_are_the_documented_ones():
     assert smard.SMARD_REGIONS == ("DE", "50Hertz", "Amprion", "TenneT", "TransnetBW")
 
 
-@pytest.mark.parametrize(("filter_id", "region"), [(4075, "DE"), (410, "FR"), (4083, "DE")])
+def test_cross_border_filter_ids_are_the_ones_smard_publishes():
+    # https://www.smard.de/app/chart_configuration/market_data_configuration.json,
+    # "Physikalischer Stromfluss": "<area> (Export)" and "<area> (Import)" per region.
+    assert smard.PHYSICAL_FLOW_FILTERS == {
+        "50Hertz": {"DK2": (4752, 4894), "PL": (4753, 4895), "CZ": (4754, 4896)},
+        "Amprion": {
+            "FR": (4755, 4897),
+            "LU": (4756, 4898),
+            "NL": (4757, 4899),
+            "AT": (4759, 4900),
+            "CH": (4760, 4901),
+            "BE": (4968, 4970),
+        },
+        "TenneT": {
+            "DK1": (4761, 4902),
+            "NL": (4762, 4903),
+            "AT": (4763, 4904),
+            "SE4": (4764, 4905),
+            "CZ": (4765, 4906),
+            "NO2": (4964, 4966),
+        },
+        "TransnetBW": {"FR": (4766, 4907), "AT": (4767, 4908), "CH": (4768, 4909)},
+    }
+    assert smard.NET_EXPORT_FILTERS == {"physical": 4963, "commercial": 4629}
+
+
+@pytest.mark.parametrize(
+    ("filter_id", "region"),
+    [(4075, "DE"), (410, "FR"), (4083, "DE"), (4752, "TenneT"), (4752, "DE"), (4629, "Amprion")],
+)
 def test_undocumented_filters_and_regions_are_refused(filter_id, region):
     session = FakeSession(FIRST, 3)
     with pytest.raises(ValueError, match="verified SMARD filters|region"):
@@ -214,6 +244,16 @@ def test_long_and_edge_gaps_are_not_filled(values):
         smard.fill_gaps(hourly(values), 3, "load")
 
 
+def test_long_gaps_can_stay_missing(caplog):
+    series = hourly([1, None, 3, None, None, None, None, 8, None])
+    with caplog.at_level(logging.WARNING, logger="gridfee.data.smard"):
+        filled, count = smard.fill_gaps(series, 3, "flow", keep_long_gaps=True)
+    assert count == 1
+    assert filled.iloc[:3].tolist() == [1.0, 2.0, 3.0]
+    assert filled.isna().tolist() == [False, False, False, True, True, True, True, False, True]
+    assert "flow: 5 missing hours in 2 gaps" in caplog.text and "stay missing" in caplog.text
+
+
 def test_collect_year_writes_tables(tmp_path):
     session = FakeSession(ms("2022-12-26"), 54, {ms("2023-06-01 12:00")})
     session.absent_series |= {(1225, "Amprion"), (1225, "TransnetBW")}
@@ -226,6 +266,8 @@ def test_collect_year_writes_tables(tmp_path):
         "solar_tso",
         "load_de",
         "generation_de",
+        "physical_flows_tso",
+        "net_export_de",
         "gaps",
     }
     assert list(tables["load_tso"].columns) == ["50Hertz", "Amprion", "TenneT", "TransnetBW"]
@@ -235,12 +277,78 @@ def test_collect_year_writes_tables(tmp_path):
         assert len(tables[name]) == 8760
         assert not tables[name].isna().any().any()
     assert (tables["gaps"]["filled_hours"] == 1).all()
+    assert (tables["gaps"]["missing_hours"] == 0).all()
+    flows = tables["physical_flows_tso"]
+    assert len(flows.columns) == 18 and {"50Hertz_PL", "TenneT_NO2"} <= set(flows.columns)
+    # The fake session returns the same value for every series: export + import.
+    pd.testing.assert_series_equal(
+        flows["Amprion_FR"], 2 * tables["load_de"]["load"], check_names=False
+    )
+    assert list(tables["net_export_de"].columns) == ["physical", "commercial"]
+
+    check = smard.annual_check_series(tables)
+    load = tables["load_de"]["load"]
+    pd.testing.assert_series_equal(check["generation_total"], 12 * load, check_names=False)
+    pd.testing.assert_series_equal(check["renewables"], 6 * load, check_names=False)
+    pd.testing.assert_series_equal(check["conventional"], 6 * load, check_names=False)
+    pd.testing.assert_series_equal(check["commercial_net_export"], load, check_names=False)
+    pd.testing.assert_series_equal(check["load"], load, check_names=False)
 
     read = smard.read_table(tmp_path / "raw", "load_tso", 2023)
     pd.testing.assert_frame_equal(read, tables["load_tso"], check_freq=False)
     assert str(read.index.tz) == "Europe/Berlin"
     with pytest.raises(SmardError, match="gridfee collect"):
         smard.read_table(tmp_path / "raw", "load_tso", 2022)
+
+
+def test_collect_year_keeps_long_flow_gaps_but_not_long_load_gaps(tmp_path):
+    gap = {ms(f"2023-06-17 {hour}:00") for hour in (20, 21, 22, 23)}
+
+    class FlowGapSession(FakeSession):
+        def get(self, url, timeout=None):
+            self.missing = gap if "/4766/" in url or "/4963/" in url else set()
+            return super().get(url, timeout)
+
+    tables = smard.collect_year(
+        2023, tmp_path / "a", SmardClient(session=FlowGapSession(FIRST, 54))
+    )
+    flows = tables["physical_flows_tso"]
+    assert flows["TransnetBW_FR"].isna().sum() == 4
+    assert not flows.drop(columns="TransnetBW_FR").isna().any().any()
+    assert tables["net_export_de"]["physical"].isna().sum() == 4
+    gaps = tables["gaps"].set_index(["filter_id", "region"])["missing_hours"]
+    assert gaps[gaps > 0].to_dict() == {(4766, "TransnetBW"): 4, (4963, "DE"): 4}
+
+    # A border SMARD has no values for in that year (Belgium before 2020) or no
+    # series at all stays empty and does not stop the collection.
+    class NoBelgiumSession(FakeSession):
+        def value(self, timestamp):
+            return None if self.belgium else super().value(timestamp)
+
+        def get(self, url, timeout=None):
+            self.belgium = "/4968/" in url or "/4970/" in url
+            return super().get(url, timeout)
+
+    session = NoBelgiumSession(FIRST, 54)
+    session.absent_series.add((4964, "TenneT"))
+    tables = smard.collect_year(2023, tmp_path / "c", SmardClient(session=session))
+    flows = tables["physical_flows_tso"]
+    assert flows["Amprion_BE"].isna().all() and flows["TenneT_NO2"].isna().all()
+    assert not flows.drop(columns=["Amprion_BE", "TenneT_NO2"]).isna().any().any()
+    assert not tables["load_tso"].isna().any().any()
+    gaps = tables["gaps"].set_index(["filter_id", "region"])["missing_hours"]
+    assert gaps[(4968, "Amprion")] == 8760 and gaps[(4964, "TenneT")] == 8760
+
+    with pytest.raises(SmardError, match="filter 410 / 50Hertz / 2023: 4 missing hours"):
+        smard.collect_year(2023, tmp_path / "b", SmardClient(session=FakeSession(FIRST, 54, gap)))
+
+
+def test_reference_file_series_all_exist():
+    reference = smard.read_reference_totals(
+        Path(__file__).parents[1] / "data" / "reference" / "annual_totals.csv", 2023
+    )
+    known = {*smard.GENERATION_FILTERS, "load", "generation_total", "renewables", "conventional"}
+    assert set(reference) <= known | {"commercial_net_export"} and len(reference) == 8
 
 
 def test_annual_totals_are_checked_against_reference(tmp_path):

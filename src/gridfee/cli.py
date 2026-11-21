@@ -96,20 +96,30 @@ def collect(
     ),
     tolerance: float = typer.Option(0.05, help="Allowed deviation from the reference totals."),
 ) -> None:
-    """Download hourly SMARD load and generation data for one year."""
+    """Download hourly SMARD load, generation and cross-border flow data for one year."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
         tables = smard.collect_year(year, out, smard.SmardClient(cache), max_gap_hours)
         totals = None
         if reference is not None:
             expected = smard.read_reference_totals(reference, year)
-            totals = smard.check_annual_totals(tables["generation_de"], expected, tolerance)
+            totals = smard.check_annual_totals(
+                smard.annual_check_series(tables), expected, tolerance
+            )
     except (smard.SmardError, OSError, ValueError) as err:
         typer.secho(f"Error: {err}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from err
 
     filled = int(tables["gaps"]["filled_hours"].sum())
     typer.echo(f"Wrote {len(tables)} tables for {year} to {out}/; {filled} missing hours filled.")
+    unfilled = int(tables["gaps"]["missing_hours"].sum())
+    if unfilled:
+        typer.secho(
+            f"{unfilled} hours of cross-border series are still missing (gaps too long to "
+            f"fill); see {smard.table_filename('gaps', year)}.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
     if totals is not None:
         typer.echo(totals.to_string(index=False))
         if not totals["passed"].all():
