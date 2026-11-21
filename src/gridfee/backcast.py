@@ -158,6 +158,8 @@ def build_backcast_inputs(
         residual_shares = residual_shares.astype(float)
         if set(residual_shares.index) != set(internal):
             raise BackcastError("residual_shares must list every internal zone exactly once")
+        if residual_shares.isna().any():
+            raise BackcastError("residual_shares has zones without a share")
         if (residual_shares < 0).any() or abs(residual_shares.sum() - 1) > _SHARE_SUM_TOLERANCE:
             raise BackcastError("residual_shares must be >= 0 and sum to 1")
         residual_shares = residual_shares.loc[internal]
@@ -182,7 +184,8 @@ def build_backcast_inputs(
             add_profile(tech, zone_id, frame.loc[usable, zone_id])
     for zone_id in exports.columns:
         add_profile(IMPORT, zone_id, (-exports.loc[usable, zone_id]).clip(lower=0.0))
-    peak_residual = float(residual_de[usable].max())
+    # The year's peak, also when that hour itself is left out.
+    peak_residual = float(residual_de.max())
     for zone_id in internal:
         if residual_shares[zone_id] > 0:
             rows[generator_id(RESIDUAL, zone_id)] = (
@@ -241,7 +244,7 @@ def _clip_to_line_capacity(
             row.hours,
             row.max_observed_mw,
         )
-    return pd.DataFrame(limited), clipped
+    return pd.DataFrame(limited, index=exports.index), clipped
 
 
 def run_backcast(
