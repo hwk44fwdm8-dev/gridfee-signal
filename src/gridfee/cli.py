@@ -68,6 +68,9 @@ def run(
     }
     if result.load_shedding_mw is not None:
         frames["load_shedding_mw"] = result.load_shedding_mw
+    else:
+        # Do not leave the shortfall of an earlier run next to these results.
+        (out / "load_shedding_mw.csv").unlink(missing_ok=True)
     for name, frame in frames.items():
         frame.to_csv(out / f"{name}.csv")
 

@@ -65,3 +65,10 @@ def test_run_reports_bad_network(tmp_path):
     )
     assert result.exit_code == 1
     assert "zones.csv" in result.output
+
+
+def test_rerun_removes_stale_load_shedding_file(tmp_path):
+    assert _run(tmp_path, "--load-shedding-cost", "3000").exit_code == 0
+    assert (tmp_path / "out" / "load_shedding_mw.csv").is_file()
+    assert _run(tmp_path).exit_code == 0
+    assert not (tmp_path / "out" / "load_shedding_mw.csv").exists()
