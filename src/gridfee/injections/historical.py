@@ -200,6 +200,10 @@ def check_energy_balance(
 
     rows = []
     for quantity, (zonal, tso_mw) in quantities.items():
+        if not zonal.index.equals(tso_mw.index):
+            raise EnergyBalanceError(f"{quantity}: zonal and TSO-zone series cover different hours")
+        if zonal.isna().any().any() or tso_mw.isna().any().any():
+            raise EnergyBalanceError(f"{quantity}: series contain missing values")
         zonal_by_tso = zonal.T.groupby(zonal.columns.map(tso_of)).sum().T
         for tso in tso_zones:
             zonal_sum = zonal_by_tso.get(tso, pd.Series(0.0, index=zonal.index))

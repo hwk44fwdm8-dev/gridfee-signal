@@ -145,6 +145,16 @@ def test_energy_balance_catches_lost_and_misplaced_energy():
     assert not balance.loc[("Amprion", "wind_offshore"), "passed"]
 
 
+def test_energy_balance_rejects_missing_hours_and_values():
+    good = build_historical_injections(ZONES, LOAD, RES, POPULATION, CAPACITY)
+    short = ZonalInjections(good.demand_mw.iloc[:2], good.res_mw, good.shares)
+    with pytest.raises(EnergyBalanceError, match="demand: zonal and TSO-zone series cover"):
+        check_energy_balance(ZONES, short, LOAD, RES)
+    holey = ZonalInjections(good.demand_mw.mask(good.demand_mw > 200), good.res_mw, good.shares)
+    with pytest.raises(EnergyBalanceError, match="demand: series contain missing values"):
+        check_energy_balance(ZONES, holey, LOAD, RES)
+
+
 def test_build_raises_when_balance_fails(monkeypatch):
     import gridfee.injections.historical as historical
 
