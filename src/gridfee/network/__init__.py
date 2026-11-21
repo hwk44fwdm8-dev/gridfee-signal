@@ -1,4 +1,4 @@
-from gridfee.network.loader import NetworkConfigError, load_network
+from gridfee.network.loader import NetworkConfigError, load_network, load_zones
 from gridfee.network.schema import TSO_ZONES, Line, Zone, ZoneKind, ZoneNetwork
 
 __all__ = [
@@ -9,4 +9,5 @@ __all__ = [
     "ZoneKind",
     "ZoneNetwork",
     "load_network",
+    "load_zones",
 ]

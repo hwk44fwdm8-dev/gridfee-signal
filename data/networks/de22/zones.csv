@@ -1,0 +1,28 @@
+# The 22 zones of Germany, taken from the owner's drafts
+# (dso-grid-fee-model-first-drafts, "Build population load shares.py").
+# tso_zone is the TSO whose control area covers most of the zone; each one was
+# checked against a public source, see TSO_SOURCES.md next to this file.
+# There is no lines.csv yet: no sourced line susceptances or capacities exist.
+zone_id,name,kind,tso_zone
+DE01,Berlin,internal,50Hertz
+DE02,Brandenburg,internal,50Hertz
+DE03,Mecklenburg-Vorpommern,internal,50Hertz
+DE04,Sachsen,internal,50Hertz
+DE05,Sachsen-Anhalt,internal,50Hertz
+DE06,Thüringen,internal,50Hertz
+DE07,Hamburg/Schleswig-Holstein,internal,TenneT
+DE08,Niedersachsen-Nord,internal,TenneT
+DE09,Niedersachsen-Süd,internal,TenneT
+DE10,NRW-Nord/Ost,internal,Amprion
+DE11,NRW-West,internal,Amprion
+DE12,Bayern-Nord,internal,TenneT
+DE13,Bayern-Mitte,internal,TenneT
+DE14,Bayern-Süd/West,internal,TenneT
+DE15,Bremen,internal,TenneT
+DE16,Hessen,internal,TenneT
+DE17,Rheinland-Pfalz,internal,Amprion
+DE18,Saarland,internal,Amprion
+DE19,BW-Stuttgart,internal,TransnetBW
+DE20,BW-Karlsruhe,internal,TransnetBW
+DE21,BW-Freiburg,internal,TransnetBW
+DE22,BW-Tübingen,internal,TransnetBW
