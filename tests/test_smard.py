@@ -251,5 +251,7 @@ def test_annual_totals_are_checked_against_reference(tmp_path):
     assert report.loc["wind_onshore", "smard_twh"] == pytest.approx(113.88)
     assert report.loc["wind_onshore", "deviation"] == pytest.approx(113.88 / 119.2 - 1)
     assert report["passed"].to_dict() == {"wind_onshore": True, "solar": False}
+    zero = smard.check_annual_totals(hourly_mw.assign(nuclear=0.0), {"nuclear": 0.0, "solar": 0.0})
+    assert zero["passed"].tolist() == [True, False]
     with pytest.raises(ValueError, match="gas"):
         smard.check_annual_totals(hourly_mw, {"gas": 1.0})

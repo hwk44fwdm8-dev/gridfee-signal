@@ -242,7 +242,10 @@ def check_annual_totals(
     rows = []
     for series, reference in reference_twh.items():
         total = float(hourly_mw[series].sum()) / 1e6
-        deviation = total / reference - 1.0
+        if reference != 0:
+            deviation = total / reference - 1.0
+        else:
+            deviation = 0.0 if total == 0 else float("inf")
         rows.append(
             {
                 "series": series,
