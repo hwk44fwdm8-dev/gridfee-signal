@@ -27,6 +27,16 @@ def load_network(directory: str | Path) -> ZoneNetwork:
         raise NetworkConfigError(f"invalid network in {directory}:\n{err}") from err
 
 
+def load_zones(path: str | Path) -> list[Zone]:
+    """Read a ``zones.csv`` on its own, for steps that need no lines."""
+    zones = _read_records(Path(path), Zone)
+    ids = [zone.zone_id for zone in zones]
+    duplicates = sorted({zone_id for zone_id in ids if ids.count(zone_id) > 1})
+    if duplicates:
+        raise NetworkConfigError(f"{path}: duplicate zone ids {duplicates}")
+    return zones
+
+
 def _read_records(path: Path, model: type[Zone] | type[Line]) -> list[Zone] | list[Line]:
     if not path.is_file():
         raise NetworkConfigError(f"missing network config file: {path}")

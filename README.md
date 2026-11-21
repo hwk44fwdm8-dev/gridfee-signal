@@ -9,9 +9,10 @@ network of Germany and turns it into a fee signal with a relief credit for stora
 charges during congestion. It is meant for historical backcasts and for forward-looking
 scenarios driven by user-supplied inputs.
 
-**Status: milestone 1 of 6.** The network loader, the DC OPF runner and their tests are
-in place. Data collection, the fee signal, validation and scenarios are not built yet,
-and the repository does not yet ship a network of Germany (see [Roadmap](#roadmap)).
+**Status: milestone 2 of 6.** The network loader, the DC OPF runner, the SMARD collector
+and historical injections are in place. The fee signal, validation and scenarios are not
+built yet, and the repository ships the 22 zones of Germany but not yet the lines between
+them (see [Roadmap](#roadmap)).
 
 ## Quick start
 
@@ -53,8 +54,8 @@ result.ptdf  # lines x zones
 ```mermaid
 flowchart LR
     cfg[zones.csv + lines.csv] --> network[network: loader]
-    smard[SMARD data] -.-> data[data: collector]
-    data -.-> inj[injections: historical]
+    smard[SMARD data] --> data[data: collector]
+    data --> inj[injections: historical]
     scen[scenario YAML + profiles] -.-> dispatch[dispatch]
     network --> flows[flows: DC OPF, PyPSA + HiGHS]
     inj -.-> flows
@@ -65,6 +66,34 @@ flowchart LR
 ```
 
 Solid arrows exist today; dashed ones are planned.
+
+## Historical data and injections
+
+```bash
+gridfee collect --year 2023 --reference data/reference/annual_totals.csv
+gridfee injections --zones data/networks/de22/zones.csv --year 2023
+```
+
+`collect` downloads hourly load, onshore wind, offshore wind and solar per TSO zone, and
+national load and generation by fuel, from [SMARD](https://www.smard.de) (public, no key)
+into `data/raw/`. Downloads are cached in `data/cache/smard/`. Hours are Europe/Berlin.
+Runs of up to 3 missing hours are interpolated and logged; longer gaps stop the run.
+With `--reference`, annual totals are compared with published figures (±5 %).
+
+`injections` splits each TSO zone's series over its zones: demand by population share,
+wind and solar by capacity share (`--population-shares`, `--capacity-shares`). It writes
+hourly demand, feed-in and net injection per zone, the shares used and an energy-balance
+report per TSO zone.
+
+Read [docs/DATA.md](docs/DATA.md) before using the output. In short:
+
+- **Shares are placeholders.** No share files ship yet, so every zone of a TSO zone gets
+  the same share. The output flags this (`shares.csv`, column `placeholder`, and a
+  warning). Placeholder results do not show where power is produced or used.
+- **The 22 zones have no lines yet**, so they cannot be run through the OPF.
+- **Four zones' TSO differs from the drafts** and several zones are split between two
+  TSOs; see [TSO_SOURCES.md](data/networks/de22/TSO_SOURCES.md).
+- **Cross-border flows are not collected**: SMARD documents no filter for them.
 
 ## Network config
 
@@ -118,7 +147,7 @@ The sign convention of the fee signal itself is set in milestone 3.
 | milestone | content | state |
 | --- | --- | --- |
 | M1 | scaffold, network loader, DC OPF runner, synthetic-network tests, CI | done |
-| M2 | SMARD collector, historical injections, energy-balance checks | planned |
+| M2 | SMARD collector, historical injections, energy-balance checks | done |
 | M3 | fee signal and validation; 2023 backcast end to end | planned |
 | M4 | scenario schema, profile import, dispatch, scenario runner | planned |
 | M5 | sensitivity runs, scenario comparison, CLI polish, docs | planned |

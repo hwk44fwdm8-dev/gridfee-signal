@@ -1,0 +1,4 @@
+# Published annual totals to check collected SMARD data against (gridfee collect).
+# Only figures read from the cited source are listed; add rows as more are verified.
+year,series,twh,source
+2023,wind_onshore,119.2,"Bundesnetzagentur, SMARD: Der Strommarkt im Jahr 2023 (2024-01-02), https://www.smard.de/page/home/topic-article/444/211756"
