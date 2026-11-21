@@ -48,7 +48,7 @@ TSO_RES_FILTERS: dict[str, int] = {
 }
 SMARD_REGIONS = ("DE", *TSO_ZONES)
 
-_CHUNK = pd.Timedelta(days=7)
+_WEEK_MS = 7 * 24 * 3600 * 1000
 
 
 class SmardError(RuntimeError):
@@ -97,13 +97,20 @@ class SmardClient:
                 ) from err
             raise
         start_ms, end_ms = _to_ms(start), _to_ms(end)
-        wanted = [t for t in chunk_starts if t < end_ms and t + _CHUNK.value // 10**6 > start_ms]
+        # A chunk runs until the next one starts (a week, 167 or 169 hours).
+        chunk_starts = sorted(chunk_starts)
+        chunk_ends = [*chunk_starts[1:], float("inf")]
+        wanted = [
+            first
+            for first, last in zip(chunk_starts, chunk_ends, strict=True)
+            if first < end_ms and last > start_ms
+        ]
 
         values: dict[int, float] = {}
         now_ms = _to_ms(pd.Timestamp.now(tz="UTC"))
         for chunk_start in wanted:
             # A chunk whose week is not over yet still changes, so it is not cached.
-            complete = chunk_start + 2 * _CHUNK.value // 10**6 < now_ms
+            complete = chunk_start + 2 * _WEEK_MS < now_ms
             name = f"{filter_id}/{region}/{filter_id}_{region}_hour_{chunk_start}.json"
             for timestamp, value in self._get(name, cache=complete)["series"]:
                 if value is not None:

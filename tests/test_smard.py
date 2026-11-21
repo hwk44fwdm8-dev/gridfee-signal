@@ -11,7 +11,6 @@ import requests
 from gridfee.data import smard
 from gridfee.data.smard import SmardClient, SmardError, SmardNoDataError
 
-WEEK_MS = 7 * 24 * 3600 * 1000
 HOUR_MS = 3600 * 1000
 
 
@@ -35,7 +34,12 @@ class FakeSession:
     """Serves weekly chunks; the value of an hour is its number since ``first``."""
 
     def __init__(self, first: int, weeks: int, missing: set[int] = frozenset()) -> None:
-        self.first, self.weeks, self.missing = first, weeks, set(missing)
+        self.first, self.missing = first, set(missing)
+        # Like SMARD, chunks start on Monday 00:00 Berlin time, so a week with a
+        # clock change has 167 or 169 hours.
+        monday = pd.Timestamp(first, unit="ms", tz="UTC").tz_convert("Europe/Berlin")
+        mondays = pd.date_range(monday, periods=weeks + 1, freq="7D")
+        self.starts = [int(t.timestamp() * 1000) for t in mondays]
         self.absent_series: set[tuple[int, str]] = set()
         self.urls: list[str] = []
 
@@ -47,12 +51,13 @@ class FakeSession:
         filter_id, region, name = url.removeprefix(smard.BASE_URL + "/").split("/")
         if (int(filter_id), region) in self.absent_series:
             return FakeResponse(None, 404)
-        starts = [self.first + week * WEEK_MS for week in range(self.weeks)]
+        starts = self.starts[:-1]
         if name == "index_hour.json":
             return FakeResponse({"timestamps": starts})
         start = int(name.removesuffix(".json").rsplit("_", 1)[1])
         assert name == f"{filter_id}_{region}_hour_{start}.json" and start in starts
-        series = [[start + h * HOUR_MS, self.value(start + h * HOUR_MS)] for h in range(168)]
+        end = self.starts[starts.index(start) + 1]
+        series = [[t, self.value(t)] for t in range(start, end, HOUR_MS)]
         return FakeResponse({"meta_data": {"version": 1}, "series": series})
 
     def chunk_requests(self) -> int:
@@ -113,6 +118,16 @@ def test_daylight_saving_days_have_23_and_25_hours():
     assert (len(spring), len(autumn)) == (23, 25)
     assert not spring.isna().any() and not autumn.isna().any()
     assert autumn.index.is_unique
+
+
+def test_last_hour_of_the_169_hour_week_is_found():
+    # Monday 23 October 2023 starts a chunk of 169 hours: its last hour begins more
+    # than 7 days after the chunk does.
+    session = FakeSession(ms("2023-10-23"), 2)
+    series = SmardClient(session=session).fetch_hourly(
+        410, "DE", pd.Timestamp("2023-10-29 23:00"), pd.Timestamp("2023-10-30 01:00")
+    )
+    assert series.tolist() == [168.0, 169.0]
 
 
 def test_cache_avoids_second_download(tmp_path):
