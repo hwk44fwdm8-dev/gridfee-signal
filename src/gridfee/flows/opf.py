@@ -15,6 +15,7 @@ from gridfee.network.schema import ZoneNetwork
 
 GENERATOR_COLUMNS = ("zone", "p_nom_mw", "marginal_cost_eur_per_mwh")
 _SHEDDING_PREFIX = "load_shedding "
+_ANCHOR = "objective_anchor"
 
 
 class OPFError(RuntimeError):
@@ -143,10 +144,15 @@ def run_dc_opf(
             p_max_pu=sheddable.div(peak.where(peak > 0, 1.0)).add_prefix(_SHEDDING_PREFIX),
             marginal_cost=load_shedding_cost,
         )
+    if not (n.generators["marginal_cost"] != 0).any():
+        # PyPSA cannot build an objective without any cost term (e.g. renewables
+        # only). A generator without capacity adds one and changes nothing else.
+        n.add("Generator", _ANCHOR, bus=network.zone_ids[0], p_nom=0.0, marginal_cost=1.0)
 
     _solve(n)
 
     dispatch = n.generators_t.p.reindex(columns=n.generators.index, fill_value=0.0)
+    dispatch = dispatch.drop(columns=_ANCHOR, errors="ignore")
     is_shedding = dispatch.columns.str.startswith(_SHEDDING_PREFIX)
     load_shedding = None
     if load_shedding_cost is not None:
@@ -208,8 +214,11 @@ def _validate_inputs(
         raise OPFError(f"generators is missing columns: {missing}")
     if not generators.index.is_unique:
         raise OPFError("generators has duplicate ids")
-    if generators.index.astype(str).str.startswith(_SHEDDING_PREFIX).any():
-        raise OPFError(f"generator ids must not start with {_SHEDDING_PREFIX!r}")
+    ids = generators.index.astype(str)
+    if ids.str.startswith(_SHEDDING_PREFIX).any() or (ids == _ANCHOR).any():
+        raise OPFError(
+            f"generator ids must not start with {_SHEDDING_PREFIX!r} or equal {_ANCHOR!r}"
+        )
     unknown = sorted(set(generators["zone"]) - zone_ids)
     if unknown:
         raise OPFError(f"generators refer to unknown zones: {unknown}")

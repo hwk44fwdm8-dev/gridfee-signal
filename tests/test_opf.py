@@ -191,6 +191,19 @@ def test_load_shedding_never_exceeds_the_zones_own_load(two_zone, hours):
     assert (result.load_shedding_mw <= load + 1e-6).all().all()
 
 
+def test_zero_cost_generators_only(two_zone, hours):
+    load = pd.DataFrame({"S": [30.0, 80.0]}, index=hours[:2])
+    generators = make_generators({"wind_N": ("N", 100, 0), "solar_S": ("S", 25, 0)})
+    result = run_dc_opf(two_zone, load, generators)
+
+    assert list(result.dispatch_mw.columns) == ["wind_N", "solar_S"]
+    np.testing.assert_allclose(result.dispatch_mw.sum(axis=1), [30, 80], atol=1e-6)
+    assert result.flows_mw["N-S"].iloc[1] >= 55 - 1e-6
+    assert_frame(result.shadow_prices, {"N-S": [0, 0]})
+    assert_frame(result.nodal_prices, {"N": [0, 0], "S": [0, 0]})
+    assert result.objective_eur == pytest.approx(0)
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [
@@ -201,6 +214,7 @@ def test_load_shedding_never_exceeds_the_zones_own_load(two_zone, hours):
         ({"snapshots": [7]}, "snapshots must be"),
         ({"generators": make_generators({"g": ("Q", 1, 1)})}, "unknown zones"),
         ({"generators": make_generators({"g": ("N", -1, 1)})}, "non-negative"),
+        ({"generators": make_generators({"objective_anchor": ("N", 1, 1)})}, "must not"),
         ({"generators": make_generators({"load_shedding N": ("N", 1, 1)})}, "must not"),
         ({"generators": pd.DataFrame({"zone": ["N"]}, index=["g"])}, "missing columns"),
         ({"availability": pd.DataFrame({"zzz": [1.0]})}, "not generators"),
