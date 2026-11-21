@@ -211,7 +211,11 @@ def fill_gaps(
     if not missing.any():
         return series, 0
     if missing.all():
-        raise SmardError(f"{label}: SMARD has no values in the requested period")
+        message = f"{label}: SMARD has no values in the requested period"
+        if not keep_long_gaps:
+            raise SmardError(message)
+        logger.warning("%s; all hours stay missing", message)
+        return series, 0
     run_id = (missing != missing.shift()).cumsum()
     run_length = missing.groupby(run_id).transform("size")
     at_edge = run_id.isin([run_id.iloc[0], run_id.iloc[-1]])
@@ -257,8 +261,9 @@ def collect_year(
     that table.
 
     Load and generation gaps too long to fill stop the run. Cross-border series
-    keep such gaps as missing values instead: SMARD has them in most years, and
-    nothing downstream reads these tables yet.
+    keep such gaps as missing values instead, also for a whole year (a border
+    whose interconnector did not exist yet): SMARD has such gaps, and nothing
+    downstream reads these tables yet.
     """
     client = client or SmardClient()
     out_dir = Path(out_dir)
@@ -269,7 +274,13 @@ def collect_year(
 
     def series(filter_id: int, region: str, keep_long_gaps: bool = False) -> pd.Series:
         label = f"filter {filter_id} / {region} / {year}"
-        raw = client.fetch_hourly(filter_id, region, start, end)
+        try:
+            raw = client.fetch_hourly(filter_id, region, start, end)
+        except SmardNoDataError:
+            if not keep_long_gaps:
+                raise
+            hours = pd.date_range(start, end, freq="h", inclusive="left", name="hour")
+            raw = pd.Series(float("nan"), index=hours)
         filled, count = fill_gaps(raw, max_gap_hours, label, keep_long_gaps)
         gaps.append(
             {

@@ -53,6 +53,8 @@ filled by linear interpolation; each fill is logged and counted in
 run with an error for load and generation. Cross-border series have such gaps in the
 source (2023: four hours on 17 June on the French border of TransnetBW), so there they
 stay missing, are logged and are counted in the `missing_hours` column of the gaps file.
+A border SMARD has no values for in a year (Belgium before 2020, for example) is an empty
+column.
 
 **Cache.** Downloaded files are kept under `data/cache/smard/`. Files for weeks that
 are not yet over are downloaded again each time, because SMARD still changes them.

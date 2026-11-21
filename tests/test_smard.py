@@ -319,6 +319,26 @@ def test_collect_year_keeps_long_flow_gaps_but_not_long_load_gaps(tmp_path):
     gaps = tables["gaps"].set_index(["filter_id", "region"])["missing_hours"]
     assert gaps[gaps > 0].to_dict() == {(4766, "TransnetBW"): 4, (4963, "DE"): 4}
 
+    # A border SMARD has no values for in that year (Belgium before 2020) or no
+    # series at all stays empty and does not stop the collection.
+    class NoBelgiumSession(FakeSession):
+        def value(self, timestamp):
+            return None if self.belgium else super().value(timestamp)
+
+        def get(self, url, timeout=None):
+            self.belgium = "/4968/" in url or "/4970/" in url
+            return super().get(url, timeout)
+
+    session = NoBelgiumSession(FIRST, 54)
+    session.absent_series.add((4964, "TenneT"))
+    tables = smard.collect_year(2023, tmp_path / "c", SmardClient(session=session))
+    flows = tables["physical_flows_tso"]
+    assert flows["Amprion_BE"].isna().all() and flows["TenneT_NO2"].isna().all()
+    assert not flows.drop(columns=["Amprion_BE", "TenneT_NO2"]).isna().any().any()
+    assert not tables["load_tso"].isna().any().any()
+    gaps = tables["gaps"].set_index(["filter_id", "region"])["missing_hours"]
+    assert gaps[(4968, "Amprion")] == 8760 and gaps[(4964, "TenneT")] == 8760
+
     with pytest.raises(SmardError, match="filter 410 / 50Hertz / 2023: 4 missing hours"):
         smard.collect_year(2023, tmp_path / "b", SmardClient(session=FakeSession(FIRST, 54, gap)))
 
