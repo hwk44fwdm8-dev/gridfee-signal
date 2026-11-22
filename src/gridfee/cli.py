@@ -9,11 +9,18 @@ import pandas as pd
 import typer
 
 from gridfee.backcast import (
+    BORDER_SEPARATOR,
+    SHEDDING_TOLERANCE_MW,
     BackcastError,
+    PlantCosts,
     build_backcast_inputs,
+    read_cost_parameters,
+    read_fuel_prices,
     read_generation_costs,
     read_generation_shares,
+    read_plant_efficiency,
     run_backcast,
+    split_borders_by_tso,
 )
 from gridfee.data import smard
 from gridfee.flows import OPFError, OPFResult, run_dc_opf
@@ -26,7 +33,6 @@ from gridfee.validation import FAIL, ValidationError, validate_backcast, write_r
 DE22 = Path("data/networks/de22")
 # Signals smaller than this are solver noise, not congestion.
 DEFAULT_THRESHOLD = 1e-6
-SHEDDING_TOLERANCE_MW = 1e-3
 
 app = typer.Typer(
     help="Congestion-based grid fee signals for battery storage in Germany.",
@@ -225,6 +231,11 @@ def validate(
         DE22, "--network", help="Directory with zones.csv and lines.csv."
     ),
     data: Path = typer.Option(Path("data/raw"), help="Directory written by `gridfee collect`."),
+    borders_by_tso: bool = typer.Option(
+        False,
+        "--borders-by-tso",
+        help="Set if the backcast was run with --borders-by-tso.",
+    ),
     wind_tolerance: float = typer.Option(0.10, help="Allowed deviation of the wind north share."),
     flow_tolerance: float = typer.Option(
         0.10, help="Allowed deviation of the net export per neighbour."
@@ -238,6 +249,10 @@ def validate(
     """Check backcast results against SMARD data and write a Markdown report."""
     try:
         network = load_network(network_dir)
+        if borders_by_tso:
+            network = split_borders_by_tso(
+                network, smard.read_table(data, "physical_flows_tso", year)
+            )
         flows = _read_berlin_hours(results / "flows_mw.csv")
         dispatch = _read_berlin_hours(results / "dispatch_mw.csv")
         report = _validate(
@@ -297,6 +312,31 @@ def backcast(
         "(data/costs/generation_costs_2023.csv); needs --generation-shares. Fuels in it are "
         "dispatched at their cost, the others feed in their observed national output.",
     ),
+    plant_efficiency: Path | None = typer.Option(
+        None,
+        help="CSV technology,zone_id,efficiency,share: efficiency classes of the plants per "
+        "fuel and zone (data/shares/plant_efficiency.csv); needs --generation-costs. Each "
+        "class is then dispatched at its own cost, within the fuel's highest national "
+        "output of the day (--plant-window), and its lowest is offered at no cost.",
+    ),
+    fuel_prices: Path | None = typer.Option(
+        None,
+        help="CSV month,technology,fuel_eur_per_mwh_th: monthly fuel prices that replace "
+        "those of --generation-costs (data/costs/fuel_prices_2023.csv); needs "
+        "--plant-efficiency.",
+    ),
+    plant_window: str = typer.Option(
+        "day",
+        help="With --plant-efficiency: 'day' or 'week'. A fuel's highest observed national "
+        "output of the day or week is its available capacity, its lowest runs at no cost.",
+    ),
+    borders_by_tso: bool = typer.Option(
+        False,
+        "--borders-by-tso",
+        help="Fix the observed flow per TSO zone and neighbour (as SMARD publishes it) "
+        "instead of per neighbour: France, the Netherlands and Czechia, which are reached "
+        "from two TSO zones, get one boundary zone per TSO zone.",
+    ),
     load_shedding_cost: float = typer.Option(
         1000.0, help="Cost of unserved load in EUR/MWh, which keeps every hour solvable."
     ),
@@ -320,6 +360,10 @@ def backcast(
     out = out or Path("results") / f"backcast_{year}"
     try:
         network = load_network(network_dir)
+        if borders_by_tso:
+            network = split_borders_by_tso(
+                network, smard.read_table(data, "physical_flows_tso", year)
+            )
         internal = [zone for zone in network.zones if zone.zone_id in network.internal_zone_ids]
         tso_load = smard.read_table(data, "load_tso", year)
         tso_res = {
@@ -335,7 +379,20 @@ def backcast(
             if capacity_factors is None
             else read_capacity_factors(capacity_factors),
         )
-        costs = None if generation_costs is None else read_generation_costs(generation_costs)
+        if plant_efficiency is not None and generation_costs is None:
+            raise BackcastError("--plant-efficiency needs --generation-costs")
+        if fuel_prices is not None and plant_efficiency is None:
+            raise BackcastError("--fuel-prices needs --plant-efficiency")
+        costs = plants = None
+        if plant_efficiency is not None:
+            plants = PlantCosts(
+                read_cost_parameters(generation_costs),
+                read_plant_efficiency(plant_efficiency),
+                None if fuel_prices is None else read_fuel_prices(fuel_prices),
+                plant_window,
+            )
+        elif generation_costs is not None:
+            costs = read_generation_costs(generation_costs)
         inputs = build_backcast_inputs(
             network,
             zonal,
@@ -349,6 +406,7 @@ def backcast(
             )["share"],
             None if generation_shares is None else read_generation_shares(generation_shares),
             costs,
+            plants,
         )
         subset = None
         if hours is not None:
@@ -370,7 +428,17 @@ def backcast(
         if inputs.placeholder_residual_shares:
             placeholders.append("generation other than wind and solar")
         shed = opf.load_shedding_mw
-        shed_hours = int((shed.sum(axis=1) > SHEDDING_TOLERANCE_MW).sum())
+        unserved = shed[shed.sum(axis=1) > SHEDDING_TOLERANCE_MW]
+        shed_hours = len(unserved)
+        pd.DataFrame(
+            {
+                "unserved_mwh": unserved.sum(axis=1),
+                "zones": [
+                    " ".join(row.index[row > SHEDDING_TOLERANCE_MW])
+                    for _, row in unserved.iterrows()
+                ],
+            }
+        ).rename_axis("hour").to_csv(out / "unserved_load_hours.csv")
         notes = [
             f"{len(opf.flows_mw)} hours solved; {len(inputs.skipped_hours)} hours of the year "
             "left out because cross-border flows or national generation are missing.",
@@ -401,6 +469,27 @@ def backcast(
                 + ". All other fuels feed in their observed national output. This is not a "
                 "market model: no start-up costs, heat demand, outages or reserves."
             )
+        if plants is not None:
+            notes.append(
+                f"{', '.join(plants.parameters.index)} are dispatched by plant efficiency class "
+                f"({plant_efficiency.name}, a plant list of 2020) at fuel and CO2 cost divided "
+                f"by efficiency ({generation_costs.name}"
+                + ("" if fuel_prices is None else f", monthly prices from {fuel_prices.name}")
+                + "); all ASSUMPTIONS, docs/DATA.md. Per fuel, the capacity available is its "
+                f"highest observed national output of the {plant_window}, and its lowest "
+                f"observed output of the {plant_window} runs at no cost. The observed output "
+                "therefore bounds the modelled fuel mix; within those bounds the cost decides. "
+                "Where SMARD's load, generation and cross-border flows do not balance in an "
+                "hour, the difference is spread over the zones like demand. Not a market model."
+            )
+        if borders_by_tso:
+            split = sorted(z for z in network.boundary_zone_ids if BORDER_SEPARATOR in z)
+            notes.append(
+                "Observed cross-border flows are fixed per TSO zone and neighbour for "
+                + ", ".join(split)
+                + ": each of these borders carries the flow SMARD reports for it, instead of "
+                "the model dividing the neighbour's flow over its lines."
+            )
         for row in inputs.clipped_exchange.itertuples():
             notes.append(
                 f"{row.neighbour}: the observed flow is above the {row.line_capacity_mw:,.0f} MW "
@@ -410,8 +499,9 @@ def backcast(
         if shed_hours:
             notes.append(
                 f"Load was left unserved in {shed_hours} hours ({shed.sum().sum() / 1e3:,.1f} "
-                "GWh). Shadow prices and the fee signal of those hours reflect the cost of "
-                "unserved load."
+                "GWh). Their shadow prices reflect the cost of unserved load, not data, so "
+                "those hours are not part of the fee signal; they are listed in "
+                "unserved_load_hours.csv."
             )
         report = _validate(
             network,
@@ -452,7 +542,8 @@ def backcast(
         f"{int(congested[inside].any(axis=1).sum())} between German zones, "
         f"{int(congested.drop(columns=inside).any(axis=1).sum())} on lines to neighbours. "
         f"Hours with a fee signal other than neutral in any zone: "
-        f"{int((labels != NEUTRAL).any(axis=1).sum())}. Results in {out}/"
+        f"{int((labels != NEUTRAL).any(axis=1).sum())} of {len(labels)} in the signal. "
+        f"Results in {out}/"
     )
     for note in notes[1:]:
         typer.secho(note, fg=typer.colors.YELLOW, err=True)

@@ -238,3 +238,17 @@ def test_rejects_invalid_inputs(two_zone, change, message):
             arguments["availability"],
             arguments["snapshots"],
         )
+
+
+def test_marginal_cost_can_change_over_time(two_zone, hours):
+    # The line is never full. costly_S costs 50, cheap_N 20 in hour 0 and 80 in hour 1.
+    load = pd.DataFrame({"S": [50.0, 50.0]}, index=hours[:2])
+    cost = pd.DataFrame({"cheap_N": [20.0, 80.0]}, index=hours[:2])
+    result = run_dc_opf(two_zone, load, TWO_ZONE_GENERATORS, marginal_cost=cost)
+    assert_frame(result.dispatch_mw, {"cheap_N": [50, 0], "costly_S": [0, 50]})
+    assert_frame(result.nodal_prices[["S"]], {"S": [20, 50]})
+
+    with pytest.raises(OPFError, match="not generators"):
+        run_dc_opf(two_zone, load, TWO_ZONE_GENERATORS, marginal_cost=cost.add_prefix("x"))
+    with pytest.raises(OPFError, match="lacks snapshots"):
+        run_dc_opf(two_zone, load, TWO_ZONE_GENERATORS, marginal_cost=cost.iloc[:1])

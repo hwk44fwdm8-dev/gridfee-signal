@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -10,18 +11,23 @@ from typer.testing import CliRunner
 
 from gridfee.backcast import (
     BackcastError,
+    PlantCosts,
     build_backcast_inputs,
     neighbour_net_export,
+    read_cost_parameters,
+    read_fuel_prices,
     read_generation_costs,
     read_generation_shares,
+    read_plant_efficiency,
     run_backcast,
+    split_borders_by_tso,
 )
 from gridfee.cli import app
 from gridfee.data import smard
 from gridfee.injections import build_historical_injections
 from gridfee.network import Line, Zone, ZoneNetwork, load_network
 from gridfee.signal import NEGATIVE, NEUTRAL, POSITIVE
-from gridfee.validation.checks import check_residual_generation
+from gridfee.validation.checks import check_cross_border, check_residual_generation
 
 DE22 = Path(__file__).parents[1] / "data" / "networks" / "de22"
 HOURS = pd.date_range("2023-01-01", periods=4, freq="h", tz="Europe/Berlin", name="hour")
@@ -436,3 +442,179 @@ def test_shipped_cost_file_orders_the_fuels():
     costs = read_generation_costs(DE22.parents[1] / "costs" / "generation_costs_2023.csv")
 
     assert list(costs.sort_values().index) == ["nuclear", "gas", "lignite", "hard_coal"]
+
+
+# Plant classes: lignite in N in two classes, gas in S in one. Cost = 30 / efficiency.
+PLANT_PARAMETERS = pd.DataFrame(
+    {
+        "fuel_eur_per_mwh_th": 30.0,
+        "efficiency": 0.5,
+        "co2_t_per_mwh_th": 0.0,
+        "vom_eur_per_mwh": 0.0,
+        "co2_price_eur_per_t": 0.0,
+    },
+    index=["lignite", "gas"],
+)
+PLANT_EFFICIENCY = pd.DataFrame(
+    {
+        "technology": ["lignite", "lignite", "gas"],
+        "zone_id": ["N", "N", "S"],
+        "efficiency": [0.3, 0.5, 0.6],
+        "share": [0.25, 0.75, 1.0],
+    }
+)
+
+
+def test_plant_classes_are_bounded_by_the_observed_output_of_the_day():
+    """All four hours are one day: lignite 0 to 120 MW, gas 20 to 100 MW."""
+    inputs = _fuel_inputs(plant_costs=PlantCosts(PLANT_PARAMETERS, PLANT_EFFICIENCY))
+    generators = inputs.generators
+
+    # The day's lowest gas output runs at no cost, the rest by efficiency class.
+    assert generators.loc["gas:S@must_run"].tolist() == ["S", 100.0, 0.0]
+    assert inputs.availability["gas:S@must_run"].tolist() == pytest.approx([0.2] * 4)
+    assert generators.loc["gas:S@0.60"].tolist() == ["S", 100.0, pytest.approx(50.0)]
+    assert inputs.availability["gas:S@0.60"].tolist() == pytest.approx([0.8] * 4)
+    assert "lignite:N@must_run" not in generators.index
+    assert generators.loc["lignite:N@0.30"].tolist() == ["N", 30.0, pytest.approx(100.0)]
+    assert generators.loc["lignite:N@0.50"].tolist() == ["N", 90.0, pytest.approx(60.0)]
+    assert inputs.marginal_cost is None
+    # Biomass has no cost row and feeds in its observed output.
+    assert generators.loc["biomass:S"].tolist() == ["S", 10.0, 0.0]
+
+
+def test_plant_classes_close_the_hourly_balance_of_the_observations():
+    """Load 200 MW. Observed supply less exports: 200, 350, 230 and 170 MW (h3 cut to 50)."""
+    inputs = _fuel_inputs(plant_costs=PlantCosts(PLANT_PARAMETERS, PLANT_EFFICIENCY))
+
+    # h1 and h2: 150 and 30 MW more supply than load become demand, 1/4 in N.
+    assert inputs.load_mw["N"].tolist() == pytest.approx([50.0, 87.5, 57.5, 50.0])
+    # h3: 30 MW more load than supply become a supply, 3/4 in S.
+    assert inputs.generators.loc["balance:S"].tolist() == ["S", 22.5, 0.0]
+    assert inputs.availability["balance:S"].tolist() == pytest.approx([0.0, 0.0, 0.0, 1.0])
+
+    # With it h3 can be served: S has 200 MW of load and export and 232.5 MW of supply.
+    result = run_backcast(NETWORK, inputs, HOURS[[3]], load_shedding_cost=1000.0)
+    assert result.opf.load_shedding_mw.to_numpy().sum() == pytest.approx(0.0, abs=1e-6)
+    checks = check_residual_generation(result.opf.dispatch_mw, FUEL_GENERATION).set_index("check")
+    assert checks.loc["gas generated", "modelled"] > 0
+
+
+def test_monthly_fuel_prices_change_the_cost_of_a_class():
+    prices = pd.DataFrame({"gas": [60.0]}, index=pd.Index([1], name="month"))
+    weekly = PlantCosts(PLANT_PARAMETERS, PLANT_EFFICIENCY, prices, window="week")
+    inputs = _fuel_inputs(plant_costs=weekly)
+
+    assert inputs.generators.loc["gas:S@0.60", "marginal_cost_eur_per_mwh"] == pytest.approx(100.0)
+    with pytest.raises(BackcastError, match="lack months"):
+        _fuel_inputs(
+            plant_costs=PlantCosts(PLANT_PARAMETERS, PLANT_EFFICIENCY, prices.rename({1: 2}))
+        )
+
+
+def test_plant_costs_are_checked():
+    plants = PlantCosts(PLANT_PARAMETERS, PLANT_EFFICIENCY)
+    with pytest.raises(BackcastError, match="not both"):
+        _fuel_inputs(plant_costs=plants, generation_costs={"gas": 1.0})
+    with pytest.raises(BackcastError, match="window"):
+        PlantCosts(PLANT_PARAMETERS, PLANT_EFFICIENCY, window="month")
+    with pytest.raises(BackcastError, match="lacks lignite in zone N"):
+        _fuel_inputs(
+            plant_costs=PlantCosts(
+                PLANT_PARAMETERS, PLANT_EFFICIENCY.assign(zone_id=["S", "S", "S"])
+            )
+        )
+
+
+def test_plant_files_are_read_and_checked(tmp_path):
+    path = tmp_path / "classes.csv"
+    path.write_text("# note\ntechnology,zone_id,efficiency,share\ngas,S,0.4,0.5\ngas,S,0.6,0.5\n")
+    assert read_plant_efficiency(path)["efficiency"].tolist() == [0.4, 0.6]
+    path.write_text("technology,zone_id,efficiency,share\ngas,S,0.4,0.5\n")
+    with pytest.raises(BackcastError, match="sum to 1"):
+        read_plant_efficiency(path)
+    path.write_text("technology,zone_id,efficiency,share\ngas,S,0.401,0.5\ngas,S,0.404,0.5\n")
+    with pytest.raises(BackcastError, match="more than once"):
+        read_plant_efficiency(path)
+    path.write_text("technology,zone_id,efficiency,share\ngas,S,0.435,0.5\ngas,S,0.444,0.5\n")
+    assert len(read_plant_efficiency(path)) == 2  # ids @0.43 and @0.44
+
+    path.write_text("month,technology,fuel_eur_per_mwh_th\n1,gas,60\n2,gas,50\n")
+    assert read_fuel_prices(path)["gas"].to_dict() == {1: 60.0, 2: 50.0}
+    path.write_text("month,technology,fuel_eur_per_mwh_th\n13,gas,60\n")
+    with pytest.raises(BackcastError, match="1 to 12"):
+        read_fuel_prices(path)
+
+
+def test_shipped_plant_files_cover_the_fuels_with_classes():
+    data = DE22.parents[1]
+    classes = read_plant_efficiency(data / "shares" / "plant_efficiency.csv")
+    shares = read_generation_shares(data / "shares" / "generation_shares.csv")
+    parameters = read_cost_parameters(data / "costs" / "generation_costs_2023.csv")
+
+    assert set(classes["technology"]) == {"lignite", "hard_coal", "gas"} <= set(parameters.index)
+    for fuel, of_fuel in classes.groupby("technology"):
+        assert set(shares.columns[shares.loc[fuel] > 0]) <= set(of_fuel["zone_id"])
+    assert read_fuel_prices(data / "costs" / "fuel_prices_2023.csv")["gas"].notna().sum() == 12
+
+
+# X is reached from N (TenneT) and from S (Amprion).
+TWO_BORDERS = ZoneNetwork(
+    zones=NETWORK.zones,
+    lines=(
+        *NETWORK.lines,
+        Line(line_id="N-X", from_zone="N", to_zone="X", susceptance_mw_per_rad=100, capacity_mw=50),
+    ),
+)
+TWO_FLOWS = pd.DataFrame(
+    {"Amprion_X": [0.0, 0.0, -30.0, 20.0], "TenneT_X": [10.0, 0.0, 0.0, -40.0]}, index=HOURS
+)
+
+
+def test_borders_by_tso_fix_the_observed_flow_of_each_border():
+    network = split_borders_by_tso(TWO_BORDERS, TWO_FLOWS)
+
+    assert network.boundary_zone_ids == ["X/Amprion", "X/TenneT"]
+    ends = {line.line_id: (line.from_zone, line.to_zone) for line in network.lines}
+    assert ends == {"N-S": ("N", "S"), "S-X": ("S", "X/Amprion"), "N-X": ("N", "X/TenneT")}
+    assert split_borders_by_tso(NETWORK, FLOWS) is NETWORK  # one TSO zone at the border
+    # a flow from a TSO zone without a line to X: X stays one zone
+    assert split_borders_by_tso(TWO_BORDERS, TWO_FLOWS.assign(TransnetBW_X=1.0)) is TWO_BORDERS
+
+    zonal = build_historical_injections(network.zones[:2], TSO_LOAD, TSO_RES)
+    inputs = build_backcast_inputs(network, zonal, GENERATION, TWO_FLOWS)
+    assert inputs.load_mw["X/Amprion"].tolist() == [0.0, 0.0, 0.0, 20.0]
+    assert inputs.load_mw["X/TenneT"].tolist() == [10.0, 0.0, 0.0, 0.0]
+    assert inputs.availability["import:X/TenneT"].tolist() == [0.0, 0.0, 0.0, 1.0]
+
+    # h3: 40 MW come in from X at N while 20 MW leave to X at S, as observed. With one
+    # zone for X the model would only see the net import of 20 MW.
+    result = run_backcast(network, inputs, HOURS[[3]], load_shedding_cost=1000.0)
+    flows = result.opf.flows_mw.iloc[0]
+    assert flows["N-X"] == pytest.approx(-40.0)
+    assert flows["S-X"] == pytest.approx(20.0)
+
+    checks = check_cross_border(network, result.opf.flows_mw, TWO_FLOWS.loc[HOURS[[3]]])
+    per_neighbour = checks[checks["check"] == "net export per neighbour"]
+    assert per_neighbour["item"].tolist() == ["X"]
+    assert per_neighbour["modelled"].iloc[0] == pytest.approx(-20.0 / 1e6)
+
+
+def test_borders_by_tso_need_a_line_for_every_observed_border():
+    network = split_borders_by_tso(TWO_BORDERS, TWO_FLOWS)
+    zonal = build_historical_injections(network.zones[:2], TSO_LOAD, TSO_RES)
+    flows = TWO_FLOWS.assign(TransnetBW_X=1.0)
+
+    with pytest.raises(BackcastError, match="TransnetBW_X"):
+        build_backcast_inputs(network, zonal, GENERATION, flows)
+
+
+def test_hours_with_unserved_load_are_not_part_of_the_signal():
+    off = {"residual:N": 0.0, "residual:S": 0.0}
+    scarce = replace(_inputs(), availability=_inputs().availability.assign(**off))
+    result = run_backcast(NETWORK, scarce, load_shedding_cost=1000.0)
+
+    unserved = result.opf.load_shedding_mw.sum(axis=1) > 1e-3
+    assert unserved.any()
+    assert result.signal.signal.index.equals(unserved.index[~unserved])
+    assert result.opf.shadow_prices.index.equals(unserved.index)

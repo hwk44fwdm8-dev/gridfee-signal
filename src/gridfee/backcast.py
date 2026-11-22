@@ -51,6 +51,14 @@ logger = logging.getLogger(__name__)
 RESIDUAL = "residual"
 IMPORT = "import"
 GENERATOR_SEPARATOR = ":"
+# "<kind>:<zone id>@<class>" for several generators of one kind in a zone.
+CLASS_SEPARATOR = "@"
+MUST_RUN = "must_run"
+BALANCE = "balance"
+# boundary zone of one neighbour towards one TSO zone: "<neighbour>/<TSO zone>"
+BORDER_SEPARATOR = "/"
+_WINDOWS = {"day": "D", "week": "W"}
+SHEDDING_TOLERANCE_MW = 1e-3
 _SHARE_SUM_TOLERANCE = 1e-6
 
 
@@ -70,6 +78,32 @@ class BackcastInputs:
     skipped_hours: pd.DatetimeIndex
     clipped_exchange: pd.DataFrame
     ptdf_reference: dict[str, float]
+    # snapshots x generator ids, EUR/MWh, for generators whose cost changes over the year.
+    marginal_cost: pd.DataFrame | None = None
+
+
+@dataclass(frozen=True)
+class PlantCosts:
+    """Costs of the fuels that are dispatched by plant efficiency class.
+
+    parameters: the cost file (:func:`read_cost_parameters`), indexed by technology.
+    efficiency: rows ``technology, zone_id, efficiency, share`` (:func:`read_plant_efficiency`).
+        Fuels of ``parameters`` without rows here get the one efficiency of ``parameters``.
+    window: "day" or "week" (Europe/Berlin). Per fuel, the capacity available in an hour
+        is the fuel's highest observed national output of that day or week, and its
+        lowest output of that day or week runs at no cost.
+    fuel_prices: month (1-12) x technology, EUR per MWh of heat (:func:`read_fuel_prices`);
+        replaces the fuel price of ``parameters`` for the technologies it lists.
+    """
+
+    parameters: pd.DataFrame
+    efficiency: pd.DataFrame
+    fuel_prices: pd.DataFrame | None = None
+    window: str = "day"
+
+    def __post_init__(self) -> None:
+        if self.window not in _WINDOWS:
+            raise BackcastError(f"window must be one of {sorted(_WINDOWS)}, got {self.window!r}")
 
 
 @dataclass(frozen=True)
@@ -81,6 +115,96 @@ class BackcastResult:
 
 def generator_id(kind: str, zone_id: str) -> str:
     return f"{kind}{GENERATOR_SEPARATOR}{zone_id}"
+
+
+def neighbour_of(zone_id: str) -> str:
+    """The neighbour a boundary zone of :func:`split_borders_by_tso` stands for."""
+    return zone_id.split(BORDER_SEPARATOR)[0]
+
+
+def split_borders_by_tso(network: ZoneNetwork, physical_flows_tso: pd.DataFrame) -> ZoneNetwork:
+    """Give a neighbour reached from several TSO zones one boundary zone per TSO zone.
+
+    SMARD publishes the physical flow per TSO zone and neighbour. With one zone per
+    neighbour the model decides how that flow divides over the neighbour's lines, by
+    their assumed susceptances; with one zone per TSO zone and neighbour
+    (``FR/Amprion``, ``FR/TransnetBW``) each border carries what was observed. Line ids
+    do not change. A neighbour is left as it is if it has lines to other boundary zones
+    or if SMARD has a flow to it from a TSO zone that has no line to it in the network
+    (Amprion to Austria in the 22-zone network).
+    """
+    observed: dict[str, set[str]] = {}
+    for column in physical_flows_tso.dropna(axis=1, how="all").columns:
+        tso, neighbour = column.split("_", 1)
+        observed.setdefault(neighbour, set()).add(tso)
+    boundary = set(network.boundary_zone_ids)
+    tso_of = network.zone_to_tso
+    tso_at: dict[str, dict[str, str]] = {}
+    keep = set()
+    for line in network.lines:
+        ends = (line.from_zone, line.to_zone)
+        outside = [end for end in ends if end in boundary]
+        if len(outside) == 2:
+            keep.update(outside)
+        elif outside:
+            inside = ends[0] if ends[1] == outside[0] else ends[1]
+            tso_at.setdefault(outside[0], {})[line.line_id] = tso_of[inside]
+    split = {
+        zone_id: lines
+        for zone_id, lines in tso_at.items()
+        if zone_id not in keep
+        and len(set(lines.values())) > 1
+        and observed.get(zone_id, set()) <= set(lines.values())
+    }
+    if not split:
+        return network
+
+    zones = []
+    for zone in network.zones:
+        if zone.zone_id not in split:
+            zones.append(zone)
+            continue
+        for tso in sorted(set(split[zone.zone_id].values())):
+            zones.append(
+                zone.model_copy(
+                    update={
+                        "zone_id": f"{zone.zone_id}{BORDER_SEPARATOR}{tso}",
+                        "name": f"{zone.name} ({tso})",
+                    }
+                )
+            )
+    lines = []
+    for line in network.lines:
+        update = {
+            end: f"{zone_id}{BORDER_SEPARATOR}{split[zone_id][line.line_id]}"
+            for end in ("from_zone", "to_zone")
+            if (zone_id := getattr(line, end)) in split
+        }
+        lines.append(line.model_copy(update=update) if update else line)
+    return ZoneNetwork(zones=tuple(zones), lines=tuple(lines))
+
+
+def boundary_net_export(network: ZoneNetwork, physical_flows_tso: pd.DataFrame) -> pd.DataFrame:
+    """Observed net export per boundary zone, also for those of :func:`split_borders_by_tso`."""
+    exports = neighbour_net_export(physical_flows_tso)
+    flows = physical_flows_tso.dropna(axis=1, how="all")
+    for zone_id in network.boundary_zone_ids:
+        if BORDER_SEPARATOR not in zone_id:
+            continue
+        neighbour, tso = zone_id.split(BORDER_SEPARATOR, 1)
+        column = f"{tso}_{neighbour}"
+        if column in flows:
+            exports[zone_id] = flows[column]
+    for neighbour in {neighbour_of(z) for z in exports.columns if BORDER_SEPARATOR in z}:
+        zones = [z for z in network.boundary_zone_ids if neighbour_of(z) == neighbour]
+        observed = {c for c in flows.columns if c.split("_", 1)[1] == neighbour}
+        unplaced = sorted(observed - {"_".join(z.split(BORDER_SEPARATOR)[::-1]) for z in zones})
+        if unplaced:
+            raise BackcastError(
+                f"cross-border flows {unplaced} have no line from that TSO zone in the network"
+            )
+        exports = exports.drop(columns=neighbour, errors="ignore")
+    return exports
 
 
 def neighbour_net_export(physical_flows_tso: pd.DataFrame) -> pd.DataFrame:
@@ -107,6 +231,7 @@ def build_backcast_inputs(
     residual_shares: pd.Series | None = None,
     generation_shares: pd.DataFrame | None = None,
     generation_costs: Mapping[str, float] | None = None,
+    plant_costs: PlantCosts | None = None,
 ) -> BackcastInputs:
     """Turn injections, national generation and cross-border flows into OPF inputs.
 
@@ -144,7 +269,7 @@ def build_backcast_inputs(
         if not frame.index.equals(hours):
             raise BackcastError(f"{name} and the injections must cover the same hours")
 
-    exports = neighbour_net_export(physical_flows_tso)
+    exports = boundary_net_export(network, physical_flows_tso)
     unknown = sorted(set(exports.columns) - set(boundary))
     if unknown:
         raise BackcastError(
@@ -170,8 +295,10 @@ def build_backcast_inputs(
         raise BackcastError("no hour has complete cross-border flows and national generation")
 
     by_fuel = generation_shares is not None
-    if generation_costs is not None and not by_fuel:
-        raise BackcastError("generation_costs need generation_shares")
+    if (generation_costs is not None or plant_costs is not None) and not by_fuel:
+        raise BackcastError("generation_costs and plant_costs need generation_shares")
+    if generation_costs is not None and plant_costs is not None:
+        raise BackcastError("give generation_costs or plant_costs, not both")
     placeholder = residual_shares is None and not by_fuel
     if by_fuel:
         residual_shares = _capacity_weighted_shares(
@@ -200,6 +327,9 @@ def build_backcast_inputs(
 
     rows: dict[str, tuple[str, float, float]] = {}
     availability: dict[str, pd.Series] = {}
+    annual_demand = demand.loc[usable, internal].sum()
+    demand_shares = annual_demand / annual_demand.sum()
+    varying_cost: dict[str, pd.Series] = {}
 
     def add_profile(kind: str, zone_id: str, series: pd.Series) -> None:
         peak = float(series.max())
@@ -216,6 +346,8 @@ def build_backcast_inputs(
         add_profile(IMPORT, zone_id, (-exports.loc[usable, zone_id]).clip(lower=0.0))
     if by_fuel:
         costs = {} if generation_costs is None else dict(generation_costs)
+        if plant_costs is not None:
+            costs = dict.fromkeys(plant_costs.parameters.index, 0.0)
         unknown = sorted(set(costs) - set(generation_shares.index))
         if unknown:
             raise BackcastError(f"generation_costs for fuels without shares: {unknown}")
@@ -230,6 +362,18 @@ def build_backcast_inputs(
                 for zone_id in internal:
                     add_profile(fuel, zone_id, national[usable] * float(share[zone_id]))
                 continue
+            if plant_costs is not None:
+                _add_plant_classes(
+                    fuel,
+                    national,
+                    share[share > 0],
+                    plant_costs,
+                    hours[usable],
+                    rows,
+                    availability,
+                    varying_cost,
+                )
+                continue
             produced = national.index[national > 0]
             window = (hours[usable] >= produced[0]) & (hours[usable] <= produced[-1])
             for zone_id in internal:
@@ -239,6 +383,17 @@ def build_backcast_inputs(
                     rows[name] = (zone_id, float(national.max() * share[zone_id]), costs[fuel])
                     if not window.all():
                         availability[name] = pd.Series(window.astype(float), index=hours[usable])
+        if plant_costs is not None:
+            # SMARD's load, generation and flows do not balance hour by hour. With
+            # capacities bounded by the observed output the difference would become
+            # unserved load or a wrong fuel mix, so it is spread over the zones like
+            # demand: as a supply where load is higher, as demand where supply is.
+            renewable = sum(frame.sum(axis=1) for frame in injections.res_mw.values())
+            supply = residual_de + renewable - exports.sum(axis=1)
+            gap = (demand[internal].sum(axis=1) - supply)[usable]
+            for zone_id in internal:
+                add_profile(BALANCE, zone_id, gap.clip(lower=0.0) * float(demand_shares[zone_id]))
+                load[zone_id] += (-gap).clip(lower=0.0) * float(demand_shares[zone_id])
     else:
         # The year's peak, also when that hour itself is left out.
         peak_residual = float(residual_de.max())
@@ -263,7 +418,60 @@ def build_backcast_inputs(
         skipped_hours=skipped,
         clipped_exchange=clipped,
         ptdf_reference={zone_id: float(reference[zone_id]) for zone_id in internal},
+        marginal_cost=pd.DataFrame(varying_cost).rename_axis("snapshot") if varying_cost else None,
     )
+
+
+def _add_plant_classes(
+    fuel: str,
+    national: pd.Series,
+    share: pd.Series,
+    plant_costs: PlantCosts,
+    hours: pd.DatetimeIndex,
+    rows: dict[str, tuple[str, float, float]],
+    availability: dict[str, pd.Series],
+    varying_cost: dict[str, pd.Series],
+) -> None:
+    """One generator per zone and efficiency class of ``fuel``, plus its must-run part.
+
+    Capacity available in a day or week (``plant_costs.window``) is the fuel's highest
+    national output of it; its lowest output of it runs at no cost (plants that stay on
+    for heat, contracts or because starting and stopping costs money).
+    """
+    peak = float(national.max())
+    local = national.index.tz_convert("Europe/Berlin").tz_localize(None)
+    in_window = national.groupby(local.to_period(_WINDOWS[plant_costs.window]))
+    must_run = (in_window.transform("min").fillna(0.0) / peak)[hours]
+    flexible = (in_window.transform("max").fillna(0.0) / peak)[hours] - must_run
+
+    parameters = plant_costs.parameters.loc[fuel]
+    price = pd.Series(float(parameters["fuel_eur_per_mwh_th"]), index=hours)
+    if plant_costs.fuel_prices is not None and fuel in plant_costs.fuel_prices.columns:
+        months = pd.Index(hours.tz_convert("Europe/Berlin").month)
+        monthly = plant_costs.fuel_prices[fuel]
+        if not months.isin(monthly.dropna().index).all():
+            raise BackcastError(f"fuel_prices lack months for {fuel}")
+        price = pd.Series(monthly.reindex(months).to_numpy(), index=hours)
+    heat = price + parameters["co2_price_eur_per_t"] * parameters["co2_t_per_mwh_th"]
+
+    classes = plant_costs.efficiency[plant_costs.efficiency["technology"] == fuel]
+    for zone_id, zone_share in share.items():
+        if must_run.max() > 0:
+            name = f"{generator_id(fuel, zone_id)}{CLASS_SEPARATOR}{MUST_RUN}"
+            rows[name] = (zone_id, peak * zone_share, 0.0)
+            availability[name] = must_run
+        of_zone = classes[classes["zone_id"] == zone_id]
+        if of_zone.empty:
+            if not classes.empty:
+                raise BackcastError(f"plant efficiency lacks {fuel} in zone {zone_id}")
+            of_zone = pd.DataFrame({"efficiency": [parameters["efficiency"]], "share": [1.0]})
+        for efficiency, class_share in zip(of_zone["efficiency"], of_zone["share"], strict=True):
+            name = f"{generator_id(fuel, zone_id)}{CLASS_SEPARATOR}{efficiency:.2f}"
+            cost = heat / efficiency + parameters["vom_eur_per_mwh"]
+            rows[name] = (zone_id, peak * zone_share * class_share, float(cost.mean()))
+            availability[name] = flexible
+            if cost.nunique() > 1:
+                varying_cost[name] = cost
 
 
 def _capacity_weighted_shares(
@@ -298,27 +506,75 @@ def read_generation_shares(path: str | Path) -> pd.DataFrame:
     return frame.pivot(index="technology", columns="zone_id", values="share").fillna(0.0)
 
 
+_COST_COLUMNS = (
+    "fuel_eur_per_mwh_th",
+    "efficiency",
+    "co2_t_per_mwh_th",
+    "vom_eur_per_mwh",
+    "co2_price_eur_per_t",
+)
+
+
+def read_plant_efficiency(path: str | Path) -> pd.DataFrame:
+    """Read ``technology,zone_id,efficiency,share``; shares sum to 1 per fuel and zone."""
+    frame = pd.read_csv(path, comment="#", dtype={"zone_id": str, "technology": str})
+    missing = {"technology", "zone_id", "efficiency", "share"} - set(frame.columns)
+    if missing:
+        raise BackcastError(f"{path}: missing columns {sorted(missing)}")
+    values = frame[["efficiency", "share"]]
+    if values.isna().any().any() or (values <= 0).any().any() or (values > 1).any().any():
+        raise BackcastError(f"{path}: efficiency and share must lie in (0, 1]")
+    # generator ids carry the efficiency with two decimals
+    if (
+        frame.assign(efficiency=frame["efficiency"].map("{:.2f}".format))
+        .duplicated(["technology", "zone_id", "efficiency"])
+        .any()
+    ):
+        raise BackcastError(
+            f"{path}: an efficiency class is listed more than once (classes must differ "
+            "at two decimals)"
+        )
+    totals = frame.groupby(["technology", "zone_id"])["share"].sum()
+    if ((totals - 1).abs() > _SHARE_SUM_TOLERANCE).any():
+        raise BackcastError(f"{path}: shares must sum to 1 per technology and zone")
+    return frame
+
+
+def read_fuel_prices(path: str | Path) -> pd.DataFrame:
+    """Read ``month,technology,fuel_eur_per_mwh_th`` into months (1-12) x technologies."""
+    frame = pd.read_csv(path, comment="#", dtype={"technology": str})
+    missing = {"month", "technology", "fuel_eur_per_mwh_th"} - set(frame.columns)
+    if missing:
+        raise BackcastError(f"{path}: missing columns {sorted(missing)}")
+    if frame.duplicated(["month", "technology"]).any():
+        raise BackcastError(f"{path}: a month and technology is listed more than once")
+    if not frame["month"].isin(range(1, 13)).all():
+        raise BackcastError(f"{path}: month must be 1 to 12")
+    if not (frame["fuel_eur_per_mwh_th"] >= 0).all():
+        raise BackcastError(f"{path}: prices must be >= 0 and not missing")
+    return frame.pivot(index="month", columns="technology", values="fuel_eur_per_mwh_th")
+
+
+def read_cost_parameters(path: str | Path) -> pd.DataFrame:
+    """The cost file of :func:`read_generation_costs` as technology x parameters."""
+    frame = pd.read_csv(path, comment="#", dtype={"technology": str})
+    missing = {"technology", *_COST_COLUMNS} - set(frame.columns)
+    if missing:
+        raise BackcastError(f"{path}: missing columns {sorted(missing)}")
+    if frame["technology"].duplicated().any():
+        raise BackcastError(f"{path}: a technology is listed more than once")
+    values = frame.set_index("technology")[list(_COST_COLUMNS)].astype(float)
+    if values.isna().any().any() or (values < 0).any().any() or (values["efficiency"] <= 0).any():
+        raise BackcastError(f"{path}: values must be >= 0, efficiency > 0, none missing")
+    return values
+
+
 def read_generation_costs(path: str | Path) -> pd.Series:
     """Marginal cost per technology in EUR/MWh of electricity from a cost file.
 
     cost = (fuel + co2_price x co2_intensity) / efficiency + vom
     """
-    columns = [
-        "fuel_eur_per_mwh_th",
-        "efficiency",
-        "co2_t_per_mwh_th",
-        "vom_eur_per_mwh",
-        "co2_price_eur_per_t",
-    ]
-    frame = pd.read_csv(path, comment="#", dtype={"technology": str})
-    missing = {"technology", *columns} - set(frame.columns)
-    if missing:
-        raise BackcastError(f"{path}: missing columns {sorted(missing)}")
-    if frame["technology"].duplicated().any():
-        raise BackcastError(f"{path}: a technology is listed more than once")
-    values = frame.set_index("technology")[columns].astype(float)
-    if values.isna().any().any() or (values < 0).any().any() or (values["efficiency"] <= 0).any():
-        raise BackcastError(f"{path}: values must be >= 0, efficiency > 0, none missing")
+    values = read_cost_parameters(path)
     heat = (
         values["fuel_eur_per_mwh_th"] + values["co2_price_eur_per_t"] * values["co2_t_per_mwh_th"]
     )
@@ -376,15 +632,23 @@ def run_backcast(
     the demand-weighted average of Germany. The signal covers the German zones
     only. Boundary zones are not fee zones, and where an observed flow was cut to
     the line capacity their prices are not determined by the model.
+
+    Hours with unserved load are not part of the signal: their shadow prices are
+    set by ``load_shedding_cost``, not by the data. They stay in ``opf``.
     """
     opf = run_dc_opf(
         network,
         load_mw=inputs.load_mw,
         generators=inputs.generators,
         availability=inputs.availability,
+        marginal_cost=inputs.marginal_cost,
         snapshots=hours,
         load_shedding_cost=load_shedding_cost,
         ptdf_reference=inputs.ptdf_reference,
     )
     ptdf = opf.ptdf[network.internal_zone_ids]
-    return BackcastResult(inputs, opf, compute_fee_signal(opf.shadow_prices, ptdf, threshold))
+    prices = opf.shadow_prices
+    if opf.load_shedding_mw is not None:
+        unserved = opf.load_shedding_mw.sum(axis=1) > SHEDDING_TOLERANCE_MW
+        prices = prices[~unserved]
+    return BackcastResult(inputs, opf, compute_fee_signal(prices, ptdf, threshold))
