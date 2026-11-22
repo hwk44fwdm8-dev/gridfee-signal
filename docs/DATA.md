@@ -183,7 +183,7 @@ to industry. Each zone still belongs to one TSO zone only (see above).
 
 `data/population/population_1km.csv.gz` gives the residents of every inhabited 1 km
 grid cell in Germany (210,556 cells) with the position of the cell centre, for placing
-load on substations by the population nearest to each. It is not yet used by a command.
+load on substations by the population nearest to each (next section).
 
 ```
 lon,lat,nuts2,population
@@ -223,6 +223,34 @@ regard to industry. The municipal figures of the Gemeindeverzeichnis for the end
 were tried first and not used: they sum to 84.36 million, 1.5 % above the Eurostat
 figure, differ by more than 2 % in several regions, and give a city such as Berlin as a
 single unit.
+
+## Load share per substation (ASSUMPTION: load follows population)
+
+`data/networks/desub/load_shares.csv` gives every substation of
+`data/networks/desub/substations.csv` its share of German load: `substation_id`,
+`nuts2`, `population` and `load_share` (sums to 1). Rebuild it from the list with:
+
+```bash
+python scripts/build_substation_load.py
+```
+
+- Every 1 km cell goes to the nearest substation **of its own NUTS2 region**, taking the
+  region from the `nuts2` column of the list. A cell is never placed across a region
+  border, also where a substation of the neighbouring region is nearer.
+- Before that the cells of each region are scaled to the region's Eurostat population of
+  1 January 2023 (`reference` in `nuts2_check.csv`). `population` summed per `nuts2` is
+  therefore exactly the Eurostat figure, and the load of a region is the same as with
+  the population shares of the 38-region network.
+- Substations at the same position (6 pairs in the list) share its cells equally. Tee
+  points carry no load and are not in the file. A substation that no cell is nearest to
+  has share 0 (`gkm`).
+- The attachment is to the substation, not to a bus or voltage level.
+
+**Limits.** Distance is the straight line to the transmission substation; the
+distribution grid in between is not looked at. Positions are those of the list, with
+its caveats (name matches not checked one by one, some placed at the mean of their
+neighbours). Regions with one substation put their whole load there (Hamburg: 2.2 % of
+Germany on `hamburg-sued`). Industry is not distinguished from households.
 
 ## Generation costs per fuel (ASSUMPTION)
 

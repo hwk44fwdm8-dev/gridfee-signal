@@ -59,6 +59,10 @@ boundaries; no boundary data is included). `nuts2_check.csv` also quotes Eurosta
 table `demo_r_d2jan` (© European Union; Eurostat data may be reused with the source
 named).
 
+`data/networks/desub/load_shares.csv` is derived from `population_1km.csv.gz` (as above)
+and from the substation positions of `data/networks/desub/substations.csv`, which are
+OpenStreetMap's (© OpenStreetMap contributors, ODbL 1.0).
+
 ## `data/costs/`
 
 `generation_costs_2023.csv` holds 14 values (efficiencies, CO2 intensities, variable
