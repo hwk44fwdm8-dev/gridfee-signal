@@ -1,0 +1,10 @@
+# DC links to neighbouring bidding zones and the substation where each lands.
+# Ratings as in the 38-region network (PyPSA-Eur's prebuilt network 0.8,
+# OpenStreetMap, ODbL 1.0). ASSUMPTION: the landing substation, from the link's
+# published route; like there, a link is modelled as a line whose susceptance
+# equals its rating, which has no effect while the far zone has no other line.
+line_id,name,substation_id,area,capacity_mw
+alegro,ALEGrO,oberzier,BE,1000
+kontek,Kontek,bentwisch,DK2,600
+nordlink,NordLink,wilster-w,NO2,1400
+baltic-cable,Baltic Cable,herrenwyk-baltic-cable,SE4,600

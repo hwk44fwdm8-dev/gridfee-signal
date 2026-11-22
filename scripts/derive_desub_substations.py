@@ -126,17 +126,10 @@ def match(
     return stations.index[nearest], "nearest" if distance[nearest] < NEAREST_KM else "none"
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--osm", type=Path, required=True)
-    parser.add_argument("--nuts", type=Path, required=True)
-    parser.add_argument("--jao-workbook", type=Path, required=True)
-    parser.add_argument("--jao-map", type=Path, required=True)
-    parser.add_argument("--osm-tags", type=Path, required=True)
-    args = parser.parse_args()
-
+def placed_circuits(workbook: Path, jao_map: Path, nuts: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """JAO's German AC circuits with the place and region of both ends; the map positions."""
     circuits = jao.german_circuits(
-        jao.read_sheet(args.jao_workbook, "Lines"), jao.read_sheet(args.jao_workbook, "Tielines")
+        jao.read_sheet(workbook, "Lines"), jao.read_sheet(workbook, "Tielines")
     )
     circuits = circuits[~circuits.index.isin(de38.HVDC_EIC)]
     corrections = pd.read_csv(de38.NETWORK_DIR / "jao_corrections.csv", comment="#")
@@ -146,16 +139,32 @@ def main() -> None:
     alias = places[places["kind"] == "alias"].set_index("name")["value"]
     circuits[["sub1", "sub2"]] = circuits[["sub1", "sub2"]].replace(alias)
     circuits = jao.name_tee_points(circuits)
-    on_map = jao.substation_positions(circuits, jao.read_map_positions(args.jao_map))
-    circuits = de38.resolve_places(circuits, de38.place_zones(on_map, args.nuts), places)
+    on_map = jao.substation_positions(circuits, jao.read_map_positions(jao_map))
+    circuits = de38.resolve_places(circuits, de38.place_zones(on_map, nuts), places)
+    return circuits, on_map
 
-    place = (
-        pd.concat([circuits.set_index("sub1")["bus0"], circuits.set_index("sub2")["bus1"]])
-        .groupby(level=0)
-        .first()
-    )
-    transformers = jao.read_transformers(args.jao_workbook)
-    transformers["place"] = transformers["substation"].replace(alias).map(place)
+
+def placed_transformers(workbook: Path, circuits: pd.DataFrame) -> pd.DataFrame:
+    """JAO's German transformers with the place (as in ``circuits``) they stand in."""
+    place = pd.concat([circuits.set_index("sub1")["bus0"], circuits.set_index("sub2")["bus1"]])
+    place = place.groupby(level=0).first()
+    places = pd.read_csv(de38.NETWORK_DIR / "jao_places.csv", comment="#")
+    alias = places[places["kind"] == "alias"].set_index("name")["value"]
+    transformers = jao.read_transformers(workbook)
+    return transformers.assign(place=transformers["substation"].replace(alias).map(place))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--osm", type=Path, required=True)
+    parser.add_argument("--nuts", type=Path, required=True)
+    parser.add_argument("--jao-workbook", type=Path, required=True)
+    parser.add_argument("--jao-map", type=Path, required=True)
+    parser.add_argument("--osm-tags", type=Path, required=True)
+    args = parser.parse_args()
+
+    circuits, on_map = placed_circuits(args.jao_workbook, args.jao_map, args.nuts)
+    transformers = placed_transformers(args.jao_workbook, circuits)
     ends = pd.concat(
         [
             circuits[[f"bus{i}", f"zone{i}", "voltage_kv", "tso", "sheet"]].set_axis(
