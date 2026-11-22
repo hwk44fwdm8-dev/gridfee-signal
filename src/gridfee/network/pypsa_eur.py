@@ -14,6 +14,7 @@ import logging
 import warnings
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pypsa
 from pypsa.clustering.spatial import get_clustering_from_busmap
@@ -134,3 +135,28 @@ def derive_zone_lines(
     centres = centres.combine_first(dc_centres)
     centres = centres.rename(columns={"x": "lon", "y": "lat"}).rename_axis("zone_id")
     return rows, centres
+
+
+def apply_published_limits(
+    zone_lines: pd.DataFrame,
+    circuits: pd.DataFrame,
+    s_max_pu: float = PYPSA_EUR_S_MAX_PU,
+) -> pd.DataFrame:
+    """Replace the AC rating of the lines that ``circuits`` lists by published limits.
+
+    ``circuits`` has one row per physical circuit between two zones: ``line_id``,
+    ``voltage_kv`` and ``max_current_a``. A listed line's ``ac_rating_mva`` becomes
+    the sum of ``sqrt(3) * voltage * current`` over its circuits, and its
+    ``capacity_mw`` is recomputed with the same ``s_max_pu``. Susceptances and the
+    other lines stay as derived.
+    """
+    unknown = sorted(set(circuits["line_id"]) - set(zone_lines["line_id"]))
+    if unknown:
+        raise ValueError(f"published limits for lines that do not exist: {unknown}")
+    mva = np.sqrt(3) * circuits["voltage_kv"] * circuits["max_current_a"] / 1000.0
+    rating = mva.groupby(circuits["line_id"]).sum()
+    result = zone_lines.copy()
+    listed = result["line_id"].isin(rating.index)
+    result.loc[listed, "ac_rating_mva"] = result.loc[listed, "line_id"].map(rating)
+    result["capacity_mw"] = s_max_pu * result["ac_rating_mva"] + result["dc_rating_mw"]
+    return result

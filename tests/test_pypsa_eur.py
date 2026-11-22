@@ -8,7 +8,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from gridfee.network.pypsa_eur import LINE_COLUMNS, derive_zone_lines, read_prebuilt_network
+from gridfee.network.pypsa_eur import (
+    LINE_COLUMNS,
+    apply_published_limits,
+    derive_zone_lines,
+    read_prebuilt_network,
+)
 
 
 def _haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -118,3 +123,45 @@ def test_read_prebuilt_network_keeps_what_is_in_service_at_220_kv_and_above(tmp_
     assert sorted(read_buses.index) == ["a1", "b1", "b_dc", "d_dc"]
     assert read_lines.index.tolist() == ["l1"]
     assert read_links.index.tolist() == ["cable"]
+
+
+def test_published_limits_replace_the_rating_of_the_listed_lines_only():
+    zone_lines = pd.DataFrame(
+        {
+            "line_id": ["A-B", "A-C"],
+            "ac_rating_mva": [1000.0, 500.0],
+            "dc_rating_mw": [0.0, 100.0],
+            "capacity_mw": [700.0, 450.0],
+        }
+    )
+    circuits = pd.DataFrame(
+        {"line_id": ["A-B", "A-B"], "voltage_kv": [380, 220], "max_current_a": [3000, 1000]}
+    )
+    result = apply_published_limits(zone_lines, circuits)
+    rating = np.sqrt(3) * (380 * 3000 + 220 * 1000) / 1000
+    assert result["ac_rating_mva"].tolist() == pytest.approx([rating, 500.0])
+    assert result["capacity_mw"].tolist() == pytest.approx([0.7 * rating, 450.0])
+    assert zone_lines["capacity_mw"].tolist() == [700.0, 450.0]
+
+
+def test_published_limits_for_an_unknown_line_are_rejected():
+    zone_lines = pd.DataFrame(
+        {"line_id": ["A-B"], "ac_rating_mva": [1.0], "dc_rating_mw": [0.0], "capacity_mw": [0.7]}
+    )
+    circuits = pd.DataFrame({"line_id": ["A-X"], "voltage_kv": [380], "max_current_a": [1]})
+    with pytest.raises(ValueError, match="A-X"):
+        apply_published_limits(zone_lines, circuits)
+
+
+def test_the_de22_lines_listed_in_jao_circuits_carry_the_published_limits():
+    from pathlib import Path
+
+    network = Path(__file__).parents[1] / "data" / "networks" / "de22"
+    circuits = pd.read_csv(network / "jao_circuits.csv", comment="#")
+    lines = pd.read_csv(network / "lines.csv", comment="#").set_index("line_id")
+    mva = np.sqrt(3) * circuits["voltage_kv"] * circuits["max_current_a"] / 1000
+    expected = 0.7 * mva.groupby(circuits["line_id"]).sum()
+    assert len(expected) == 4
+    assert lines.loc[expected.index, "capacity_mw"].to_numpy() == pytest.approx(
+        expected.to_numpy(), abs=0.06
+    )

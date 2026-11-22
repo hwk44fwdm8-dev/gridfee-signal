@@ -11,6 +11,11 @@ licensed under the [Open Database License (ODbL) 1.0](https://opendatacommons.or
 Contains information from OpenStreetMap, © OpenStreetMap contributors. These derived
 files are made available under the ODbL as well.
 
+The rating of four lines uses the maximum currents of the circuits listed in
+`jao_circuits.csv`, quoted from JAO's Core Static Grid Model, 3rd release
+(<https://www.jao.eu/static-grid-model>, © JAO and the Core TSOs, not under an open
+licence; the workbook itself is not included).
+
 The assignment of buses to zones used NUTS 2021 boundaries from Eurostat GISCO
 (© EuroGeographics for the administrative boundaries). No boundary data is included
 in this repository.

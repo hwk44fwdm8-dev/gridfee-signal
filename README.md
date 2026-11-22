@@ -31,6 +31,9 @@ comes largely from the observed bounds, and the costs and line capacities remain
 assumptions. 70 further hours have unserved load; their prices reflect the model's
 penalty and not data, so they are kept out of the signal and listed apart
 ([docs/METHODOLOGY.md](docs/METHODOLOGY.md)).
+Those figures are with estimated ratings for every line. With the maximum currents
+that JAO publishes for the four priced lines (now in `data/networks/de22/lines.csv`),
+the signal is not neutral in 21 hours (0.2 %) and no hour has unserved load.
 
 ## Quick start
 

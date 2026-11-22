@@ -98,5 +98,52 @@ Known weaknesses of the result:
 - A zone belongs to one TSO in `zones.csv` although several zones are split between two
   ([TSO_SOURCES.md](../data/networks/de22/TSO_SOURCES.md)).
 
+### Published limits for four lines (JAO)
+
+Four lines between German zones no longer use the standard rating. Their rating is the
+sum, over the circuits in [`jao_circuits.csv`](../data/networks/de22/jao_circuits.csv),
+of `sqrt(3) x voltage x maximum current`, with the maximum current that the TSOs publish
+in JAO's Core Static Grid Model (3rd release, workbook of 1 March 2023,
+<https://www.jao.eu/static-grid-model>). These are the four lines that carried the whole
+2023 fee signal with the standard ratings.
+
+| Line | Circuits in the JAO workbook | A each | Rating before, MVA | Rating now, MVA | `capacity_mw` before | now |
+| --- | --- | --- | --- | --- | --- | --- |
+| `DE05-DE06` Sachsen-Anhalt–Thüringen | Lauchstaedt–Vieselbach 471, 472 (380 kV) | 3,600 | 3,396.2 | 4,738.9 | 2,377.3 | 3,317.2 |
+| `DE05-DE09` Sachsen-Anhalt–Niedersachsen-Süd | Helmstedt–Wolmirstedt 491, 492 (380 kV) | 3,150 | 3,396.2 | 4,146.5 | 2,377.3 | 2,902.6 |
+| `DE16-DE20` Hessen–BW-Karlsruhe | Buerstadt–Rheinau KURPFA W, O (380 kV) | 3,096 | 3,396.2 | 4,075.4 | 2,377.3 | 2,852.8 |
+| `DE17-DE20` Rheinland-Pfalz–BW-Karlsruhe | Daxlanden–Maximiliansau (220 kV); Daxlanden–Weingarten (380 kV); Mutterstadt–GKM S, N (220 kV) | 2,500; 2,720; 1,380 | 2,457.8 | 3,794.6 | 1,720.4 | 2,656.2 |
+
+How the circuits were matched, and what remains an assumption:
+
+- **Matching is by substation.** For the first three lines the OpenStreetMap data has
+  exactly two 380 kV circuits between the two zones, between the same two substations
+  as the two JAO circuits. The zone of each substation follows from its location
+  (Lauchstädt, Wolmirstedt: Sachsen-Anhalt; Vieselbach: Thüringen; Helmstedt:
+  Niedersachsen-Süd; Bürstadt: Hessen; Rheinau, Daxlanden, GKM: BW-Karlsruhe;
+  Maximiliansau, Weingarten, Mutterstadt: Rheinland-Pfalz). The coordinates in JAO's
+  map file are schematic and were not used.
+- **`DE17-DE20` does not match one to one.** JAO lists the 380 kV circuit
+  Daxlanden–Weingarten as a tie-line between Amprion and TransnetBW; in the
+  OpenStreetMap data that circuit ends west of the Rhine and does not reach the zone
+  BW-Karlsruhe, and Mutterstadt–GKM is counted there as four circuits where JAO has two.
+  The capacity uses the four JAO circuits. The susceptance is still the one derived
+  from OpenStreetMap, so it is without the 380 kV circuit.
+- **Which column.** `Fixed` where the workbook has it, else `Period 1` (the only period
+  given for these circuits). For Buerstadt–Rheinau Amprion publishes only `DLRmax(A)`,
+  the upper end of the weather-dependent rating, so this line's limit is an upper bound.
+  Circuits listed by both TSOs have the same value in both rows, except
+  Daxlanden–Weingarten, where TransnetBW gives a second period of 3,150 A; the lower
+  value is used.
+- **The 0.7 stays an assumption.** The published value is the current a circuit can
+  carry, not what the TSOs allow in N-1 secure operation.
+- **Only these four lines.** All other lines keep the standard ratings; the comparison
+  suggests those are too low as well (380 kV standard: 2,580 A per circuit).
+- **One equivalent line per pair of zones** remains the model. The published limits
+  are those of the circuits, and flows inside a zone are still not modelled.
+
+The workbook is not in this repository (JAO's terms restrict reproduction); the ten
+rows above are quoted with their source.
+
 For your own network, `gridfee.network.pypsa_eur.derive_zone_lines(buses, lines, links,
 busmap)` does steps 3 to 5 for any busmap.
