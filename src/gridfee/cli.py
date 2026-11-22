@@ -35,10 +35,19 @@ from gridfee.signal import (
     write_signal,
 )
 from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
-from gridfee.two_run import METHODS, TWO_RUN, RedispatchCosts, TwoRunResult, run_two_run_backcast
+from gridfee.two_run import (
+    DEFAULT_CONVENTIONAL_REDISPATCH_COST,
+    DEFAULT_CURTAILMENT_FACTOR,
+    METHODS,
+    TWO_RUN,
+    RedispatchCosts,
+    TwoRunResult,
+    run_two_run_backcast,
+)
 from gridfee.validation import (
     FAIL,
     ValidationError,
+    check_redispatch_volumes,
     compare_with_redispatch,
     hourly_redispatch,
     read_redispatch,
@@ -311,6 +320,11 @@ def validate(
             )
         flows = _read_berlin_hours(results / "flows_mw.csv")
         dispatch = _read_berlin_hours(results / "dispatch_mw.csv")
+        redispatch_file = results / "redispatch_mw.csv"
+        movements = None
+        if redispatch_file.exists():
+            served = _read_signal_table(results, "fee_signal").index
+            movements = _read_berlin_hours(redispatch_file).loc[served]
         report = _validate(
             network,
             flows,
@@ -321,6 +335,7 @@ def validate(
             flow_tolerance,
             out or results / "revalidation.md",
             [f"Written by `gridfee validate` from the results in {results}."],
+            movements,
         )
     except (NetworkConfigError, ValidationError, smard.SmardError, OSError, ValueError) as err:
         typer.secho(f"Error: {err}", fg=typer.colors.RED, err=True)
@@ -536,8 +551,24 @@ def backcast(
     ),
     curtailment_cost: float | None = typer.Option(
         None,
-        help="With --method two-run: EUR per MWh of curtailed wind, solar and other feed-in "
-        "without a marginal cost. Default: the market run's price of the hour.",
+        help="With --method two-run: override the curtailment cost of zero-marginal-cost "
+        "feed-in with a flat EUR/MWh.",
+    ),
+    curtailment_factor: float = typer.Option(
+        DEFAULT_CURTAILMENT_FACTOR,
+        min=5,
+        max=15,
+        help="With --method two-run: multiply the conventional redispatch cost by this "
+        "factor for renewable reductions (EnWG §13(1a)).",
+    ),
+    conventional_redispatch_cost: float = typer.Option(
+        DEFAULT_CONVENTIONAL_REDISPATCH_COST,
+        help="With --method two-run: reference conventional redispatch cost in EUR/MWh.",
+    ),
+    market_price_curtailment: bool = typer.Option(
+        False,
+        "--market-price-curtailment",
+        help="With --method two-run: use the previous hourly market price for curtailment.",
     ),
     wind_tolerance: float = typer.Option(0.10, help="Allowed deviation of the wind north share."),
     flow_tolerance: float = typer.Option(
@@ -618,7 +649,13 @@ def backcast(
                 subset,
                 load_shedding_cost,
                 threshold,
-                RedispatchCosts(redispatch_markup, curtailment_cost),
+                RedispatchCosts(
+                    markup=redispatch_markup,
+                    curtailment_cost=curtailment_cost,
+                    curtailment_factor=curtailment_factor,
+                    conventional_redispatch_cost=conventional_redispatch_cost,
+                    market_price_curtailment=market_price_curtailment,
+                ),
                 **({"chunk_hours": block_hours} if block_hours else {}),
             )
         else:
@@ -732,6 +769,17 @@ def backcast(
             )
         if method == TWO_RUN:
             moved = result.hourly()
+            if curtailment_cost is not None:
+                curtailment_note = f"zero-cost feed-in uses a flat {curtailment_cost:g} EUR/MWh"
+            elif market_price_curtailment:
+                curtailment_note = "zero-cost feed-in uses the hourly market price"
+            else:
+                curtailment_note = (
+                    f"renewable reductions cost {result.costs.renewable_curtailment_cost:g} "
+                    f"EUR/MWh ({curtailment_factor:g} × {conventional_redispatch_cost:g} EUR/MWh; "
+                    "EnWG §13(1a) model proxy), and other zero-cost feed-in uses the "
+                    "hourly market price"
+                )
             notes.append(
                 "Two-run method: flows, dispatch, prices and the fee signal are those of the "
                 "grid run that follows a market run with Germany as one price zone. Modelled "
@@ -740,14 +788,7 @@ def backcast(
                 f"{int((moved['raised_mwh'] + moved['lowered_mwh'] > 0).sum())} hours, at "
                 f"{moved['cost_eur'].sum() / 1e6:,.2f} million EUR. ASSUMPTIONS "
                 f"(docs/METHODOLOGY.md): a moved plant gets or returns its marginal cost and "
-                f"{redispatch_markup:g} EUR/MWh on top; curtailed wind, solar and other feed-in "
-                "without a marginal cost costs "
-                + (
-                    "the market run's price of the hour"
-                    if curtailment_cost is None
-                    else f"{curtailment_cost:g} EUR/MWh"
-                )
-                + "."
+                f"{redispatch_markup:g} EUR/MWh on top; {curtailment_note} before the markup."
             )
         report = _validate(
             network,
@@ -759,6 +800,7 @@ def backcast(
             flow_tolerance,
             out / "validation.md",
             notes,
+            result.redispatch_mw.loc[result.signal.signal.index] if method == TWO_RUN else None,
         )
     except (
         NetworkConfigError,
@@ -850,6 +892,7 @@ def _validate(
     flow_tolerance: float,
     report: Path,
     notes: list[str],
+    movements: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, Path]:
     checks = validate_backcast(
         network,
@@ -866,6 +909,10 @@ def _validate(
     )
     if report.suffix.lower() == ".csv":
         raise ValueError(f"{report}: the report is Markdown; its checks go to a .csv next to it")
+    if movements is not None:
+        volumes, volume_notes = check_redispatch_volumes(movements, year)
+        checks = pd.concat([checks, volumes], ignore_index=True)
+        notes.extend(volume_notes)
     write_report(checks, report, f"Validation of the {year} backcast against SMARD", notes)
     checks.to_csv(report.with_suffix(".csv"), index=False)
     return checks, report

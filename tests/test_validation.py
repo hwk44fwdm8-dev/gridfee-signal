@@ -12,12 +12,35 @@ from gridfee.validation import (
     PASS,
     ValidationError,
     check_cross_border,
+    check_redispatch_volumes,
     check_residual_generation,
     check_wind_north_share,
     render_report,
 )
 
 HOURS = pd.date_range("2023-01-01", periods=2, freq="h", tz="Europe/Berlin", name="snapshot")
+
+
+def test_redispatch_volumes_do_not_net_plant_classes_or_pool_renewables_and_imports():
+    moved = pd.DataFrame(
+        {
+            "gas:S@0.50": [10, -30],
+            "gas:S@must_run": [-6, 0],
+            "pumped_storage:S": [3, -2],
+            "wind_onshore:N": [-5, 2],
+            "biomass:N": [0, -3],
+            "import:FR@220": [-7, 0],
+            "balance:N": [5, -20],
+        },
+        index=HOURS,
+    )
+    checks, notes = check_redispatch_volumes(moved, 2023)
+    assert checks["modelled"].tolist() == pytest.approx([13e-6, 38e-6, 8e-6, 7e-6])
+    assert checks["observed"].iloc[:3].tolist() == [10.87648, 2.97231, 10.47942]
+    assert pd.isna(checks["observed"].iloc[3])
+    assert checks["status"].eq(INFO).all()
+    assert any("not a like-for-like import cut observation" in note for note in notes)
+    assert check_redispatch_volumes(moved, 2024)[0]["observed"].isna().all()
 
 
 def _zone(zone_id: str, tso: str) -> Zone:

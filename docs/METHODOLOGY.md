@@ -340,6 +340,16 @@ and zone; negative = lowered), `redispatch_raised_by_zone_mw.csv` and
 `redispatch_lowered_by_zone_mw.csv` per zone of the network, and
 `redispatch_hourly.csv` with the MWh raised, the MWh lowered and their cost per hour.
 
+Both `backcast` and `validate` report conventional redispatch by direction,
+renewable curtailment and import cuts separately in hours with no unserved load
+in either run. The 2023 reference is the national [SMARD breakdown by energy
+source](https://www.smard.de/page/home/topic-article/211972/213384/netzengpassmanagement-je-energietraeger),
+summing monthly volumes for known fuels only (including pumped storage with
+conventional generation). The published totals are not limited to the model's
+hours or to current-driven measures, so no deviation or verdict is given. There
+is no direct published import cuts benchmark: countertrading covers more than
+reductions in imports, and input flow clipping is reported separately.
+
 The method adds these **assumptions**:
 
 - **What a plant is paid to move** (`--redispatch-markup`, default 1 EUR/MWh): a
@@ -349,14 +359,17 @@ The method adds these **assumptions**:
   markup stands for the cost of changing a schedule. It is not taken from a source.
   It keeps the grid run from moving plants without an overload. No start-up costs,
   minimum loads, ramping or lead times: every plant can move in every hour.
-- **What curtailed wind and solar cost** (`--curtailment-cost`, default: the market
-  run's price of the hour, not below zero): lowering feed-in that has no marginal
-  cost costs this per MWh plus the markup. That is wind and solar, and also the
-  feed-in that follows its observed output, the lowest output of a plant class that
-  runs at no cost, and imports. The default is the market revenue the curtailed plant
-  loses; the feed-in premium that a plant under the EEG is compensated for as well is
-  not included. With a higher value conventional plants are lowered before wind and
-  solar, as the law's minimum factors intend.
+- **What renewable reductions cost:** `--curtailment-factor` (5–15 under
+  [EnWG §13(1a)](https://www.gesetze-im-internet.de/enwg_2005/__13.html), default 10
+  per the [BNetzA determination of 30 November 2020](https://www.bundesnetzagentur.de/SharedDocs/Downloads/DE/Sachgebiete/Energie/Unternehmen_Institutionen/Konsultationen/Redispatch/FestlegungMindestfaktoren.pdf))
+  times `--conventional-redispatch-cost` (default 25 EUR/MWh, the reference cost in
+  [Weinhold, 2021, §3](https://arxiv.org/abs/2109.04940)), plus the markup. This is a
+  model proxy, not the TSOs' published annual kalkulatorischer Preis or an explicit
+  constraint on how much conventional reduction a renewable reduction must replace.
+  Other zero-marginal-cost feed-in, including imports, still uses the hourly market
+  price (floored at zero) plus the markup. Use `--market-price-curtailment` to recover
+  the previous pricing for all zero-cost feed-in, or `--curtailment-cost` for the
+  legacy flat override.
 - **The market run sees no grid at all**, also not the lines to the neighbours: the
   observed exchange is given to it. The grid run may cut an import or leave an export
   unserved (at `--load-shedding-cost`) like the single run.

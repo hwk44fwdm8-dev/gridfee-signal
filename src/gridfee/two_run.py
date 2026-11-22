@@ -25,7 +25,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from gridfee.backcast import BackcastError, BackcastInputs
+from gridfee.backcast import GENERATOR_SEPARATOR, BackcastError, BackcastInputs
+from gridfee.data.smard import TSO_RES_FILTERS
 from gridfee.flows import OPFResult, run_dc_opf
 from gridfee.network import Zone, ZoneNetwork
 from gridfee.signal import FeeSignal, compute_fee_signal
@@ -39,6 +40,9 @@ _KEPT = "kept "
 _RAISED = "raised "
 REDISPATCH_TOLERANCE_MW = 1e-6
 DEFAULT_CHUNK_HOURS = 1000
+DEFAULT_CURTAILMENT_FACTOR = 10.0
+DEFAULT_CONVENTIONAL_REDISPATCH_COST = 25.0
+RENEWABLE_KINDS = frozenset((*TSO_RES_FILTERS, "hydro", "biomass", "other_renewable"))
 
 
 @dataclass(frozen=True)
@@ -49,14 +53,20 @@ class RedispatchCosts:
         its marginal cost plus the markup; a plant that is lowered pays back the
         marginal cost it saves less the markup. It stands for the cost of changing
         a schedule and makes the grid run move as little as needed.
-    curtailment_cost: EUR per MWh by which feed-in without a marginal cost (wind,
-        solar, feed-in that follows its observed output, must-run output, imports)
-        is lowered, on top of the markup. None: the market run's price of the hour,
-        i.e. the market revenue the curtailed plant loses.
+    curtailment_factor: renewable minimum factor under EnWG §13(1a).
+    conventional_redispatch_cost: reference conventional redispatch cost in EUR/MWh.
+        The product is the renewable reduction cost before the markup.
+    curtailment_cost: legacy flat EUR/MWh override for feed-in with zero marginal cost.
+    market_price_curtailment: use the legacy hourly market price for all feed-in
+        with zero marginal cost. Non-renewable zero-cost feed-in uses this
+        price even in factor mode.
     """
 
     markup: float = 1.0
     curtailment_cost: float | None = None
+    curtailment_factor: float = DEFAULT_CURTAILMENT_FACTOR
+    conventional_redispatch_cost: float = DEFAULT_CONVENTIONAL_REDISPATCH_COST
+    market_price_curtailment: bool = False
 
     def __post_init__(self) -> None:
         if not 0 < self.markup < float("inf"):
@@ -64,6 +74,16 @@ class RedispatchCosts:
         cost = self.curtailment_cost
         if cost is not None and not 0 <= cost < float("inf"):
             raise BackcastError(f"the curtailment cost must be >= 0, got {cost!r}")
+        if not 5 <= self.curtailment_factor <= 15:
+            raise BackcastError("the curtailment factor must be between 5 and 15")
+        if not 0 < self.renewable_curtailment_cost < float("inf"):
+            raise BackcastError("the conventional redispatch cost must be positive and finite")
+        if cost is not None and self.market_price_curtailment:
+            raise BackcastError("choose either a flat curtailment cost or market-price curtailment")
+
+    @property
+    def renewable_curtailment_cost(self) -> float:
+        return self.curtailment_factor * self.conventional_redispatch_cost
 
 
 @dataclass(frozen=True)
@@ -179,6 +199,11 @@ def run_two_run_backcast(
     )
     # Output kept from the market run is priced at what lowering it gives up.
     kept_cost = (cost - costs.markup).where(cost != 0, -(curtailment + costs.markup), axis=0)
+    if costs.curtailment_cost is None and not costs.market_price_curtailment:
+        renewables = generators.index.str.split(GENERATOR_SEPARATOR, n=1).str[0]
+        kept_cost.loc[:, renewables.isin(RENEWABLE_KINDS)] = -(
+            costs.renewable_curtailment_cost + costs.markup
+        )
     raised_cost = cost + costs.markup
 
     capacity = generators["p_nom_mw"].astype(float)

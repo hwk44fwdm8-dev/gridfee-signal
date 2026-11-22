@@ -33,7 +33,7 @@ def test_market_run_ignores_the_line_and_the_grid_run_moves_what_overloads_it():
     assert result.opf.flows_mw["N-S"].abs().max() <= 100.0 + 1e-6
     assert result.opf.dispatch_mw.loc[HOURS[1], "wind_onshore:N"] == pytest.approx(150.0)
     hourly = result.hourly()
-    assert hourly.loc[HOURS[1]].tolist() == pytest.approx([50.0, 50.0, 50 * 41.0 + 50 * 1.0])
+    assert hourly.loc[HOURS[1]].tolist() == pytest.approx([50.0, 50.0, 50 * 41.0 + 50 * 251.0])
     raised, lowered = result.by_zone()
     assert raised.loc[HOURS[1], "S"] == pytest.approx(50.0)
     assert lowered.loc[HOURS[1], "N"] == pytest.approx(50.0)
@@ -41,11 +41,11 @@ def test_market_run_ignores_the_line_and_the_grid_run_moves_what_overloads_it():
 
 
 def test_fee_signal_comes_from_the_grid_run():
-    """The line is worth what one MW more of it saves: 41 up in S and 1 down in N."""
+    """One MW more of line capacity saves 41 up in S and 251 down in N."""
     result = _two_run()
 
-    assert abs(result.opf.shadow_prices.loc[HOURS[1], "N-S"]) == pytest.approx(42.0)
-    assert result.signal.signal.loc[HOURS[1]].tolist() == pytest.approx([31.5, -10.5])
+    assert abs(result.opf.shadow_prices.loc[HOURS[1], "N-S"]) == pytest.approx(292.0)
+    assert result.signal.signal.loc[HOURS[1]].tolist() == pytest.approx([219.0, -73.0])
     labels = result.signal.classification
     assert labels.loc[HOURS[1]].to_dict() == {"N": POSITIVE, "S": NEGATIVE}
     assert (labels.drop(index=HOURS[1]) == NEUTRAL).all().all()
@@ -61,6 +61,23 @@ def test_curtailment_cost_and_markup_set_the_cost_of_moving():
         RedispatchCosts(markup=0.0)
     with pytest.raises(BackcastError, match="curtailment"):
         RedispatchCosts(curtailment_cost=-1.0)
+
+
+def test_curtailment_factor_uses_the_conventional_reference_and_can_use_legacy_market_price():
+    factor = _two_run(
+        costs=RedispatchCosts(markup=2.0, curtailment_factor=5.0, conventional_redispatch_cost=30.0)
+    )
+    assert factor.redispatch_cost_eur[HOURS[1]] == pytest.approx(50 * (42.0 + 152.0))
+    legacy = _two_run(costs=RedispatchCosts(market_price_curtailment=True))
+    assert legacy.redispatch_cost_eur[HOURS[1]] == pytest.approx(50 * (41.0 + 1.0))
+    assert legacy.signal.signal.loc[HOURS[1]].tolist() == pytest.approx([31.5, -10.5])
+    for invalid in (4.99, 15.01, float("nan")):
+        with pytest.raises(BackcastError, match="between 5 and 15"):
+            RedispatchCosts(curtailment_factor=invalid)
+    with pytest.raises(BackcastError, match="positive and finite"):
+        RedispatchCosts(conventional_redispatch_cost=0.0)
+    with pytest.raises(BackcastError, match="choose either"):
+        RedispatchCosts(curtailment_cost=70.0, market_price_curtailment=True)
 
 
 def test_cheaper_plant_behind_the_line_is_lowered_for_a_dearer_one():
@@ -104,7 +121,7 @@ def test_cli_backcast_two_run_writes_the_redispatch_and_leaves_the_single_run_as
     assert "validation failed" in two.output and "Two-run method" in two.output
     assert "0.1 GWh raised and 0.1 GWh lowered in 1 hours" in two.output
     signal = pd.read_csv(tmp_path / "two" / "fee_signal.csv", index_col=0)
-    assert signal.iloc[1].round(6).tolist() == [31.5, -10.5]
+    assert signal.iloc[1].round(6).tolist() == [219.0, -73.0]
     moved = pd.read_csv(tmp_path / "two" / "redispatch_mw.csv", index_col=0)
     assert moved.iloc[1].round(6).to_dict() == {
         "wind_onshore:N": -50.0,
@@ -116,6 +133,40 @@ def test_cli_backcast_two_run_writes_the_redispatch_and_leaves_the_single_run_as
     assert hourly["raised_mwh"].round(6).tolist() == [0.0, 50.0, 0.0, 0.0]
     lowered = pd.read_csv(tmp_path / "two" / "redispatch_lowered_by_zone_mw.csv", index_col=0)
     assert lowered["N"].round(6).tolist() == [0.0, 50.0, 0.0, 0.0]
+    checks = pd.read_csv(tmp_path / "two" / "validation.csv")
+    volumes = checks[checks["check"] == "redispatch volume"].set_index("item")
+    assert volumes["modelled"].to_dict() == {
+        "conventional raised": 50e-6,
+        "conventional lowered": 0,
+        "renewable curtailment": 50e-6,
+        "import cuts": 0,
+    }
+    again = CliRunner().invoke(
+        app,
+        [
+            "validate",
+            "--results",
+            str(tmp_path / "two"),
+            "--year",
+            "2023",
+            "--network",
+            str(tmp_path / "net"),
+            "--data",
+            str(tmp_path / "raw"),
+            "--out",
+            str(tmp_path / "revalidation.md"),
+        ],
+    )
+    assert "validation failed" in again.output
+    pd.testing.assert_frame_equal(checks, pd.read_csv(tmp_path / "revalidation.csv"))
+
+    legacy = CliRunner().invoke(
+        app,
+        base + [str(tmp_path / "legacy"), "--method", "two-run", "--market-price-curtailment"],
+    )
+    assert "zero-cost feed-in uses the hourly market price" in legacy.output
+    legacy_signal = pd.read_csv(tmp_path / "legacy" / "fee_signal.csv", index_col=0)
+    assert legacy_signal.iloc[1].round(6).tolist() == [31.5, -10.5]
 
     # Without the option, and with --method single, the files are those of the single run.
     assert "Two-run" not in single.output

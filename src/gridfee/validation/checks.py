@@ -14,12 +14,14 @@ import pandas as pd
 from gridfee.backcast import (
     CLASS_SEPARATOR,
     GENERATOR_SEPARATOR,
+    IMPORT,
     RESIDUAL,
     neighbour_net_export,
     neighbour_of,
 )
 from gridfee.data.smard import TSO_RES_FILTERS
 from gridfee.network import ZoneNetwork
+from gridfee.two_run import RENEWABLE_KINDS
 
 PASS = "pass"
 FAIL = "fail"
@@ -38,6 +40,11 @@ WIND = ("wind_onshore", "wind_offshore")
 # The control areas that reach the North Sea and Baltic coasts.
 NORTH_TSO_ZONES = ("50Hertz", "TenneT")
 _MWH_PER_TWH = 1e6
+_SMARD_REDISPATCH_FUELS = "https://www.smard.de/page/home/topic-article/211972/213384/netzengpassmanagement-je-energietraeger"
+_SMARD_2023 = (
+    "https://www.smard.de/page/home/topic-article/444/213590/netzengpassmanagement-im-jahr-2023"
+)
+_REDISPATCH_2023_TWH = (10.87648, 2.97231, 10.47942, float("nan"))
 
 
 class ValidationError(ValueError):
@@ -53,6 +60,48 @@ def _row(check, item, observed, modelled, unit, deviation, tolerance=None) -> di
             strict=True,
         )
     )
+
+
+def check_redispatch_volumes(
+    redispatch_mw: pd.DataFrame, year: int
+) -> tuple[pd.DataFrame, list[str]]:
+    """Compare served-hour movements (grid minus market) with annual SMARD context."""
+    kinds = redispatch_mw.columns.str.split(GENERATOR_SEPARATOR, n=1).str[0]
+    renewable = kinds.isin(RENEWABLE_KINDS)
+    imports = kinds == IMPORT
+    conventional = kinds.isin(
+        ("lignite", "hard_coal", "gas", "nuclear", "other_conventional", "pumped_storage", RESIDUAL)
+    )
+    volumes = (
+        redispatch_mw.loc[:, conventional].clip(lower=0.0).to_numpy().sum(),
+        -redispatch_mw.loc[:, conventional].clip(upper=0.0).to_numpy().sum(),
+        -redispatch_mw.loc[:, renewable].clip(upper=0.0).to_numpy().sum(),
+        -redispatch_mw.loc[:, imports].clip(upper=0.0).to_numpy().sum(),
+    )
+    items = ("conventional raised", "conventional lowered", "renewable curtailment", "import cuts")
+    observed = _REDISPATCH_2023_TWH if year == 2023 else (float("nan"),) * len(items)
+    rows = [
+        _row("redispatch volume", item, target, volume / _MWH_PER_TWH, "TWh", float("nan"))
+        for item, target, volume in zip(items, observed, volumes, strict=True)
+    ]
+    notes = [
+        f"Modelled redispatch volumes cover {len(redispatch_mw):,} served hours only. They exclude "
+        "input flow clipping and synthetic balancing feed-in. If generation is aggregated, the "
+        "residual generator counts as conventional."
+    ]
+    if year == 2023:
+        notes.extend(
+            [
+                f"Published observations are whole-year Germany totals from [SMARD by energy "
+                f"source]({_SMARD_REDISPATCH_FUELS}), summed by month and fuel. Conventional "
+                "includes pumped storage; unknown fuel (e.g. exchange trades) is excluded. "
+                "They are not restricted to the model's hours or current-driven measures.",
+                f"No published import-cuts-only volume was identified. [SMARD reports "
+                f"6.016 TWh of countertrading]({_SMARD_2023}) in 2023, a broader category, not "
+                "a like-for-like import cut observation.",
+            ]
+        )
+    return pd.DataFrame(rows, columns=CHECK_COLUMNS), notes
 
 
 def _same_hours(observed: pd.DataFrame, modelled: pd.DataFrame, label: str) -> pd.DataFrame:
