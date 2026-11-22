@@ -43,11 +43,22 @@ that often have opposite signs.
 
 ## Quick start
 
-Python 3.11 or newer.
+Install Git and Python 3.11 or newer, then open a terminal:
 
 ```bash
-pip install -e ".[dev]"
-pytest
+git clone https://github.com/hwk44fwdm8-dev/gridfee-signal.git
+cd gridfee-signal
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+On Windows PowerShell, use `py -3 -m venv .venv` and
+`.venv\Scripts\Activate.ps1` for the last two commands.
+To explore the demo without solving a model, skip to the
+[interactive results viewer](#interactive-results-viewer).
+
+```bash
+python -m pip install -e .
 
 gridfee run \
   --network examples/networks/three_zone \
@@ -56,7 +67,8 @@ gridfee run \
   --out results/three_zone
 ```
 
-This solves three hours on a synthetic three-zone network and writes `flows_mw.csv`,
+This solves three hours on a synthetic network with three internal zones and one
+boundary zone. It writes `flows_mw.csv`,
 `shadow_prices.csv`, `nodal_prices.csv`, `dispatch_mw.csv` and `ptdf.csv`. Add
 `--hours hours.csv` to solve only a subset of hours (for example representative hours).
 
@@ -187,27 +199,31 @@ convention, what is observed and what is assumed: [docs/METHODOLOGY.md](docs/MET
 
 ## Interactive results viewer
 
-Run from the repository root in your Python environment:
+Clone the repository and activate the Python environment as shown in
+[Quick start](#quick-start), then run from the repository root:
 
 ```bash
 python -m pip install -e ".[viewer]"
-python -m streamlit run src/gridfee/viewer.py --server.address 127.0.0.1 --browser.gatherUsageStats false
+python -m streamlit run src/gridfee/viewer.py --server.address 127.0.0.1 --server.headless true --browser.gatherUsageStats false
 ```
 
 Open the local URL printed by Streamlit (normally <http://127.0.0.1:8501>). The
 app starts with synthetic data so you can try it without downloading data or
-running a model.
+running a model. The headless flag skips Streamlit's optional email prompt; open
+the URL in your browser yourself.
 
 To inspect a completed backcast or `run` + `signal`, stop the demo and start it
 with your results directory and the **same network used in that run**:
 
 ```bash
-python -m streamlit run src/gridfee/viewer.py --server.address 127.0.0.1 --browser.gatherUsageStats false -- \
+python -m streamlit run src/gridfee/viewer.py --server.address 127.0.0.1 --server.headless true --browser.gatherUsageStats false -- \
   --results results/backcast_2023 --network data/networks/de22
 ```
 
 Filter dates (Europe/Berlin) and explore the daily fee signal, zone locations,
-congested lines, and modeled unserved load. The viewer reads `fee_signal`,
+congested lines, and modeled unserved load. Select the same start and end date
+to see hourly line loading, line prices and unserved load where available.
+The viewer reads `fee_signal`,
 `shadow_prices`, and `flows_mw` as CSV or Parquet, plus `load_shedding_mw`
 when present. Timestamps must include a UTC offset (for example
 `2023-01-01T00:00:00+01:00`). It does not rerun the model, write to the run directory, or send

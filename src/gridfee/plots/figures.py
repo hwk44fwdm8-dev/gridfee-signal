@@ -253,7 +253,7 @@ def _map_lines(tables, line_table, zones, lines, regions):
             edgecolors="black",
             linewidths=1.2,
             zorder=7,
-            label=f"unserved load (largest: {unserved.max():,.1f} GWh)",
+            label=f"unserved load (largest: {_energy_label(unserved.max())})",
         )
         ax.legend(loc="upper left", fontsize=8, frameon=False)
     ax.set_title("Full lines and unserved load", fontsize=11)
@@ -371,6 +371,10 @@ def _timeseries_lines(tables: ResultTables, zones, lines, threshold: float):
     return figure
 
 
+def _energy_label(gwh: float) -> str:
+    return f"{gwh * 1000:,.3g} MWh" if gwh < 1 else f"{gwh:,.1f} GWh"
+
+
 def _timeseries_unserved(tables: ResultTables):
     daily = daily_unserved(tables)
     if daily.empty or not len(daily.columns):
@@ -378,7 +382,7 @@ def _timeseries_unserved(tables: ResultTables):
     daily = daily[daily.sum().sort_values(ascending=False).index] / 1000.0
     if len(daily.columns) > MAX_UNSERVED_ZONES:
         head = daily.iloc[:, : MAX_UNSERVED_ZONES - 1]
-        daily = head.assign(other=daily.iloc[:, MAX_UNSERVED_ZONES - 1 :].sum(axis=1))
+        daily = head.assign(other=daily.iloc[:, MAX_UNSERVED_ZONES - 1 :].sum(axis=1, min_count=1))
     figure, ax = plt.subplots(figsize=(12, 3.6), constrained_layout=True)
     edges = _day_edges(daily.index)[:-1]
     bottom = np.zeros(len(daily))
@@ -388,7 +392,7 @@ def _timeseries_unserved(tables: ResultTables):
         ax.bar(edges, daily[zone_id], width=1.0, align="edge", bottom=bottom, color=color)
         bottom += daily[zone_id].to_numpy()
     ax.legend(
-        [f"{zone_id} ({daily[zone_id].sum():,.1f} GWh)" for zone_id in daily.columns],
+        [f"{zone_id} ({_energy_label(daily[zone_id].sum())})" for zone_id in daily.columns],
         fontsize=8,
         frameon=False,
         ncols=4,
