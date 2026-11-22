@@ -44,6 +44,9 @@ SHIFT_OF_BRANCH = {
     30: "s3_wt_sa_so", 31: "s1_wt_sa", 32: "s3_wt_sa_so", 33: "s2_wt_sa",
 }  # fmt: skip
 LOCAL_TIME = "Europe/Berlin"
+# Branches whose large plants are listed one by one (sEEnergies industrial sites): paper,
+# refineries, chemicals, non-metallic minerals, metals.
+SITE_BRANCHES = (17, 19, 20, 23, 24)
 
 
 class DemandError(ValueError):
@@ -277,6 +280,32 @@ def spread_over_cells(
     if len(left):
         raise DemandError(f"no cells in the states of municipalities {sorted(left.index)[:5]}")
     return out, pd.DataFrame(placed).T
+
+
+def move_to_sites(branches: pd.DataFrame, sites: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Give the listed plants of a district their part of its industry branch.
+
+    ``branches`` has ``district``, ``branch``, ``use`` and ``grid`` (MWh used and drawn
+    from the grid); ``sites`` has ``district``, ``branch`` and ``mwh`` (the plant's own
+    use). Per district and branch the plants take their summed use, at most the whole
+    branch, at the branch's grid draw per MWh used, shared by plant use. A plant in a
+    district without that branch gets nothing. Returns the sites with ``grid`` added and
+    the branches with ``grid`` reduced by what the plants took.
+    """
+    keys = ["district", "branch"]
+    if branches.duplicated(keys).any():
+        raise DemandError("a district and branch is listed twice")
+    if (sites["mwh"] < 0).any():
+        raise DemandError("a site has a negative use")
+    listed = sites.groupby(keys)["mwh"].sum().rename("listed").reset_index()
+    out = branches.merge(listed, on=keys, how="left").fillna({"listed": 0.0})
+    part = (out["listed"].clip(upper=out["use"]) / out["use"].where(out["use"] > 0)).fillna(0.0)
+    out["moved"] = out["grid"] * part
+    placed = sites.merge(out[[*keys, "moved", "listed"]], on=keys, how="left")
+    share = (placed["mwh"] / placed["listed"].where(placed["listed"] > 0)).fillna(0.0)
+    placed = placed.assign(grid=(placed["moved"] * share).fillna(0.0).to_numpy())
+    out["grid"] -= out["moved"]
+    return placed.drop(columns=["moved", "listed"]), out.drop(columns=["moved", "listed"])
 
 
 def place_on_substations(

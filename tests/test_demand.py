@@ -18,6 +18,7 @@ from gridfee.injections.demand import (
     day_classes,
     household_dynamisation,
     load_profile_tables,
+    move_to_sites,
     place_on_substations,
     profile_tables_from_year,
     public_holidays,
@@ -268,3 +269,36 @@ def test_shipped_sector_demand_covers_every_substation() -> None:
     households = placed.set_index("substation_id")["households"]
     per_head = households / population["population"].reindex(households.index)
     assert per_head[population["population"] > 50_000].between(1.2, 2.0).all()
+
+
+def test_listed_plants_take_their_use_out_of_their_district_and_branch() -> None:
+    branches = pd.DataFrame(
+        {
+            "district": ["01001", "01001", "01002"],
+            "branch": [17, 24, 17],
+            "use": [100.0, 50.0, 10.0],
+            "grid": [80.0, 50.0, 10.0],
+        }
+    )
+    sites = pd.DataFrame(
+        {
+            "district": ["01001", "01001", "01002", "01003"],
+            "branch": [17, 17, 17, 24],
+            "mwh": [45.0, 15.0, 40.0, 5.0],
+        }
+    )
+    placed, left = move_to_sites(branches, sites)
+    # 60 of 100 MWh used are at plants, at 0.8 MWh from the grid per MWh used; the plant
+    # of 01002 is listed with more than its branch has; 01003 has no such branch.
+    assert placed["grid"].tolist() == pytest.approx([36.0, 12.0, 10.0, 0.0])
+    assert left["grid"].tolist() == pytest.approx([32.0, 50.0, 0.0])
+    assert placed["grid"].sum() + left["grid"].sum() == pytest.approx(branches["grid"].sum())
+
+
+def test_sites_need_unique_branches_and_positive_use() -> None:
+    branches = pd.DataFrame({"district": ["a", "a"], "branch": [17, 17], "use": 1.0, "grid": 1.0})
+    sites = pd.DataFrame({"district": ["a"], "branch": [17], "mwh": [1.0]})
+    with pytest.raises(DemandError, match="twice"):
+        move_to_sites(branches, sites)
+    with pytest.raises(DemandError, match="negative"):
+        move_to_sites(branches.iloc[:1], sites.assign(mwh=-1.0))

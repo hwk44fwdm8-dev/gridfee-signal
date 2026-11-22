@@ -270,7 +270,8 @@ python scripts/build_sector_demand.py
 | --- | --- | --- |
 | Use per municipality and sector | DemandRegio, table 70 (FfE open data API), from district totals of 2017 | households 129.5, cts 153.1, industry 240.5 TWh |
 | Industry: grid draw and branches | DemandRegio, table 25: use, grid draw and own generation per district and 29 branches (WZ 2008), 2017 | industry 183.7 TWh from the grid (56.8 TWh generated on site) |
-| Place inside a municipality | 1 km population cells, municipal boundaries (BKG VG250 of 2019, 2015, 2010) | MWh per cell |
+| Large plants | sEEnergies industrial sites (D5.1, CC BY 4.0): 316 German plants (314 placed) of paper, refineries, chemicals, non-metallic minerals and metals with their electricity use | 28.1 of the 183.7 TWh sit at the plant's own position |
+| Place the rest inside a municipality | 1 km population cells, municipal boundaries (BKG VG250 of 2019, 2015, 2010) | MWh per cell |
 | Cell to substation | nearest substation of the cell's NUTS2 region, as for `load_shares.csv` | MWh per substation |
 
 - **Hourly shape.** Households and cts follow the standard load profiles H0 and G0
@@ -285,15 +286,28 @@ python scripts/build_sector_demand.py
   sectors. The annual figures of 2017 only set the proportions, so any year can be run.
 - **Check against 2023.** Summed per TSO area, the profiles alone correlate with the
   observed hourly load at 0.80 (50Hertz), 0.91 (Amprion), 0.88 (TenneT) and 0.86
-  (TransnetBW). Peak over mean load per substation ranges from 1.26 to 1.90; with the
+  (TransnetBW). Peak over mean load per substation ranges from 1.28 to 1.90; with the
   population split it is the TSO area's for every substation.
 
 **ASSUMPTIONS and limits.**
 
 - The municipal table's metadata calls sector 2 commerce and 3 industry. Sector 2 equals
   the industry table district by district, so it is read as industry here.
-- Inside a municipality every sector follows population; a plant at the edge of a town
-  sits where the town's people live. Known industrial sites are not used yet.
+- A listed plant takes its own use out of its district's branch (paper 17, refineries
+  19, chemicals 20, non-metallic minerals 23, metals 24), at most the whole branch, at
+  the branch's grid draw per MWh used, and goes to the nearest substation of its NUTS2
+  region. The list gives 70.1 TWh of use; 28.1 TWh of grid draw are placed this way,
+  because a plant's listed use is often far below its district's branch (BASF: 1.0 of
+  6.4 TWh of chemicals in Ludwigshafen).
+- Everything else follows population inside its municipality: households, commerce and
+  the industry no listed plant accounts for (155.6 TWh).
+- **Check against eGon2035** (electricity load per 110 kV bus, read from the Open Energy
+  Platform, not included here: no licence stated there). With its loads given to the
+  substations by the same rule, shares per substation correlate at 0.77 with the
+  population split, 0.83 with demand per sector and 0.84 with the plants placed; no
+  weighting of the three sectors gets above 0.85, so much of the rest is how either
+  side assigns load to neighbouring substations (0.95 once substations within 20 km are
+  summed). eGon is a 2035 scenario, not a measurement.
 - The spatial pattern and the branch mix are those of 2017. Nothing in it is measured
   per substation, and no measured regional demand of 2023 or later was found.
 - SMARD's load is taken to exclude what industry generates for itself, which is why

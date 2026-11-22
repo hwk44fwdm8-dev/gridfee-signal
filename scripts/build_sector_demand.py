@@ -12,6 +12,7 @@ extra (geopandas). Method and limits: docs/DATA.md.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import zipfile
 from pathlib import Path
@@ -25,6 +26,7 @@ from gridfee.injections.demand import (
     INDUSTRY_COLUMNS,
     SECTORS,
     SHIFT_OF_BRANCH,
+    move_to_sites,
     place_on_substations,
     profile_tables_from_year,
     spread_over_cells,
@@ -50,6 +52,17 @@ BOUNDARY_YEARS = (2019, 2015, 2010)
 # The table's metadata names 2 commerce and 3 industry. It is the other way round: 2 is,
 # district by district, the industry table of DemandRegio (id_spatial 25, 240.5 TWh).
 SECTOR_OF_ID = {1: "households", 2: "industry", 3: "cts"}
+# sEEnergies "D5.1 Industry Dataset With Demand Data": 343 German plants of energy-intensive
+# industry with their electricity use. Its sectors as WZ 2008 divisions.
+SITES = "https://opendata.arcgis.com/datasets/5e36c0af918040ed936b4e4c101f611d_0.csv"
+BRANCH_OF_SITE = {
+    "Paper and printing": 17,
+    "Refineries": 19,
+    "Chemical industry": 20,
+    "Non-metallic minerals": 23,
+    "Iron and steel": 24,
+    "Non-ferrous metals": 24,
+}
 
 
 def fetch(source: str) -> bytes:
@@ -74,39 +87,76 @@ def municipal_demand(source: str) -> pd.DataFrame:
     return wide[SECTORS].reset_index()
 
 
-def industry_by_district(source: str) -> tuple[pd.Series, pd.DataFrame]:
-    """Per district (5-digit key): grid draw over use, and grid draw per shift class.
+def industry_branches(source: str) -> pd.DataFrame:
+    """MWh used and drawn from the grid per district (5-digit key) and industry branch.
 
-    From DemandRegio's electricity use of industry per district and branch, which gives
-    use, grid draw and own generation. The row ``DE`` holds the German totals, for
-    municipalities whose district the table does not know.
+    DemandRegio's electricity use of industry per district and branch, which gives use,
+    grid draw and own generation.
     """
     data = pd.DataFrame(json.loads(fetch(source))["data"])
     data = data.assign(
         district=(data["id_region"].astype(int) // 1000).map("{:05d}".format),
         branch=data["internal_id"].str[0],
         kind=data["internal_id"].str[1].map({1: "use", 2: "grid"}),
-        value=data["value"].clip(lower=0.0),
+        value=data["value"].clip(lower=0.0) * 1e3,  # the table is in GWh
     ).dropna(subset="kind")
-    data["column"] = "industry_" + data["branch"].map(SHIFT_OF_BRANCH)
-    if data["column"].isna().any():
+    if not data["branch"].isin(SHIFT_OF_BRANCH).all():
         raise SystemExit("an industry branch has no shift class")
-    totals = data.pivot_table(index="district", columns="kind", values="value", aggfunc="sum")
-    totals.loc["DE"] = totals.sum()
-    classes = data[data["kind"] == "grid"].pivot_table(
-        index="district", columns="column", values="value", aggfunc="sum"
+    wide = data.pivot_table(index=["district", "branch"], columns="kind", values="value")
+    return wide.fillna(0.0).reset_index()
+
+
+def industrial_sites(source: str, towns: gpd.GeoDataFrame, cells: pd.DataFrame) -> pd.DataFrame:
+    """The German plants of the sEEnergies list: position, district, region, branch, MWh."""
+    listed = pd.read_csv(io.BytesIO(fetch(source)), encoding="utf-8-sig")
+    listed = listed[(listed["Country"] == "DE") & (listed["ElectricityDemand_TJ_a"] > 0)]
+    sites = pd.DataFrame(
+        {
+            "name": listed["CompanyName"].to_numpy(),
+            "lon": listed["Longitude"].to_numpy(),
+            "lat": listed["Latitude"].to_numpy(),
+            "branch": listed["Eurostat_Name"].map(BRANCH_OF_SITE).to_numpy(),
+            "mwh": listed["ElectricityDemand_TJ_a"].to_numpy() / 3.6e-3,
+        }
     )
+    if sites["branch"].isna().any():
+        raise SystemExit("an industrial site has a sector without a branch")
+    sites["district"] = assign_municipalities(sites, towns)["ags"].str[:5]
+
+    def points(table: pd.DataFrame) -> gpd.GeoDataFrame:
+        at = gpd.points_from_xy(table["lon"], table["lat"], crs=4326)
+        return gpd.GeoDataFrame(table[["nuts2"]] if "nuts2" in table else None, geometry=at)
+
+    near = gpd.sjoin_nearest(points(sites).to_crs(3035), points(cells).to_crs(3035), how="left")
+    return sites.assign(nuts2=near[~near.index.duplicated()]["nuts2"].to_numpy())
+
+
+def site_cells(sites: pd.DataFrame) -> pd.DataFrame:
+    """The plants as cells of their own: their grid draw in the column of their shift class."""
+    out = sites[["lon", "lat", "nuts2"]].assign(**dict.fromkeys(COLUMNS, 0.0))
+    column = "industry_" + sites["branch"].map(SHIFT_OF_BRANCH)
+    for name in INDUSTRY_COLUMNS:
+        out[name] = sites["grid"].where(column == name, 0.0)
+    return out.assign(industry=sites["grid"])
+
+
+def at_grid_draw(municipal: pd.DataFrame, branches: pd.DataFrame) -> pd.DataFrame:
+    """Reduce industry to what it draws from the grid and split it by shift class.
+
+    ``branches`` (``industry_branches``, less what its listed plants took) gives per
+    district the grid draw per MWh used and the shift classes of that draw; a
+    municipality whose district it does not know gets the German figures.
+    """
+    column = "industry_" + branches["branch"].map(SHIFT_OF_BRANCH)
+    classes = branches.pivot_table(index="district", columns=column, values="grid", aggfunc="sum")
     classes = classes.reindex(columns=INDUSTRY_COLUMNS, fill_value=0.0).fillna(0.0)
     classes.loc["DE"] = classes.sum()
-    return totals["grid"] / totals["use"].where(totals["use"] > 0), classes
-
-
-def at_grid_draw(municipal: pd.DataFrame, source: str) -> pd.DataFrame:
-    """Reduce industry to what it draws from the grid and split it by shift class."""
-    ratio, classes = industry_by_district(source)
-    mix = classes.div(classes.sum(axis=1).where(classes.sum(axis=1) > 0), axis=0)
+    use = branches.groupby("district")["use"].sum()
+    use.loc["DE"] = use.sum()
+    ratio = classes.sum(axis=1) / use.where(use > 0)
+    mix = classes.div(classes.sum(axis=1).where(classes.sum(axis=1) > 0), axis=0).fillna(0.0)
     district = municipal["ags"].str[:5]
-    known = district.isin(mix.dropna().index) & district.isin(ratio.dropna().index)
+    known = district.isin(ratio.dropna().index)
     district = district.where(known, "DE")
     industry = municipal["industry"] * district.map(ratio).to_numpy()
     split = mix.loc[district].to_numpy() * industry.to_numpy()[:, None]
@@ -184,6 +234,7 @@ def main() -> None:
     parser.add_argument(
         "--branches", default=BRANCHES, help="URL or path of industry per district and branch."
     )
+    parser.add_argument("--sites", default=SITES, help="URL or path of the industrial sites.")
     parser.add_argument("--h0", default=TEMPORAL.format(id=23, year=PROFILE_YEAR))
     parser.add_argument("--g0", default=TEMPORAL.format(id=22, year=PROFILE_YEAR))
     parser.add_argument("--substations", type=Path, default=DESUB / "substations.csv")
@@ -196,8 +247,17 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    municipal = at_grid_draw(municipal_demand(args.demand), args.branches)
-    spread, levels = spread_with(load_population_grid(args.grid), municipal, args.boundaries)
+    cells = load_population_grid(args.grid)
+    branches = industry_branches(args.branches)
+    sites = industrial_sites(args.sites, municipalities(args.boundaries[0]), cells)
+    sites, branches = move_to_sites(branches, sites)
+    on_sites = sites["grid"].sum() / 1e6
+    print(
+        f"industry on {(sites['grid'] > 0).sum()} of {len(sites)} listed sites: {on_sites:.1f} TWh"
+    )
+    municipal = at_grid_draw(municipal_demand(args.demand), branches)
+    spread, levels = spread_with(cells, municipal, args.boundaries)
+    spread = pd.concat([spread, site_cells(sites[sites["grid"] > 0])], ignore_index=True)
     print("TWh placed by boundary set and the level at which a municipality was found:")
     print((levels[SECTORS] / 1e6).round(2).to_string())
 
@@ -227,7 +287,12 @@ def main() -> None:
             "Municipal boundaries VG250 of 2019, 2015 and 2010 (c) GeoBasis-DE / BKG,",
             "dl-de/by-2-0 (no boundary data is included); population cells:",
             "data/population/population_1km.csv.gz.",
-            "ASSUMPTION: inside a municipality every sector's use follows population.",
+            "Industrial sites: sEEnergies 'D5.1 Industry Dataset With Demand Data',",
+            "Fraunhofer ISI, Utrecht University, Halmstad University, CC BY 4.0.",
+            f"{on_sites:.1f} TWh of industry sit at the listed plants of paper, refineries,",
+            "chemicals, non-metallic minerals and metals: per district and branch the",
+            "plants' own use, at most the whole branch.",
+            "ASSUMPTION: inside a municipality all other use follows population.",
             "ASSUMPTION: the municipal table's sector 2 is industry and 3 commerce (its",
             "metadata says the reverse; 2 equals the industry table district by district).",
             f"Per cent of the use placed by municipality, district, state: {by_level}",

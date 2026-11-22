@@ -76,6 +76,11 @@ shift class, spread over population cells and summed per substation. It also use
 `population_1km.csv.gz`, the substation positions (both as above) and municipal
 boundaries VG250 (© GeoBasis-DE / BKG, dl-de/by-2-0; no boundary data is included).
 
+The large industrial plants in `sector_demand.csv` are placed with "D5.1 Industry Dataset
+With Demand Data" of the sEEnergies project (Fraunhofer ISI, Utrecht University, Halmstad
+University, CC BY 4.0, https://s-eenergies-open-data-euf.hub.arcgis.com); the list itself
+is not included.
+
 `data/demand/profile_tables.csv` is derived from the DemandRegio load curves "Lastgang
 (SLP H0)" and "Lastgang (SLP G0)" (© FfE, CC BY 4.0): averaged per season, day type and
 hour. The shift class per industry branch in `src/gridfee/injections/demand.py` is taken
