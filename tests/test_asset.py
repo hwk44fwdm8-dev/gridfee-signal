@@ -55,6 +55,10 @@ def test_battery_capacity_power_exclusions_and_multiple_cycles():
     assert soc.min() >= -1e-8
     assert soc.max() <= 1.5 + 1e-8
     assert soc[-1] == pytest.approx(0)
+    assert result.hourly.state_of_charge_mwh.to_numpy() == pytest.approx(soc)
+    assert result.hourly.charge_mw.to_numpy() == pytest.approx(np.maximum(-injection, 0))
+    assert result.hourly.discharge_mw.to_numpy() == pytest.approx(np.maximum(injection, 0))
+    assert result.hourly.excluded.tolist() == [False, True, False, False, False, False]
     assert np.abs(injection).max() <= 2
     assert result.summary["total_eur"] == pytest.approx(-48.6)
 

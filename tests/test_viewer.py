@@ -208,7 +208,7 @@ def test_backcast_with_split_border_zones(monkeypatch, tmp_path, invalid_border)
         assert "load_shedding_mw does not match" in app.error[0].value
     else:
         assert not app.error
-        assert [m.value for m in app.metric] == ["2", "1", "1"]
+        assert [m.value for m in app.metric][:3] == ["2", "1", "1"]
         lines = app.dataframe[1].value
         assert lines.loc["A-X", "To"] == "X/50Hertz"
         assert lines.loc["C-X", "To"] == "X/Amprion"
@@ -240,3 +240,22 @@ def test_site_asset_demo_and_battery(monkeypatch):
     assert not app.exception
     assert any("perfect foresight" in text.value for text in app.caption)
     assert app.dataframe[-1].value.index.tolist() == ["2023-10"]
+    hourly = app.dataframe[-2].value
+    assert len(hourly) == 25
+    assert hourly.timestamp_utc.nunique() == 25
+    assert "state_of_charge_mwh" in hourly
+    assert any("not a tariff or payment" in text.value for text in app.caption)
+    assert app.get("download_button")[0].label == "Download hourly CSV"
+    app.date_input[0].set_value((date(2023, 10, 30), date(2023, 10, 30))).run()
+    assert len(app.dataframe[-2].value) == 24
+
+
+def test_asset_pattern_counts_days_once_across_repeated_hour():
+    tables, _ = viewer._demo()
+    hours = tables.shadow_prices.index
+    frame = pd.DataFrame({"signal": 2.0, "charge_mw": 1.0, "discharge_mw": 0.0}, index=hours)
+    pattern = viewer._asset_pattern(frame)
+    assert pattern.loc[2, "charging"] == 14
+    assert pattern.loc[2, "mean_signal"] == 2
+    assert pattern["discharging"].eq(0).all()
+    assert viewer._asset_pattern(frame.iloc[:0])["mean_signal"].isna().all()

@@ -238,6 +238,9 @@ best case, respecting chronological state of charge within the usable energy
 capacity, with empty start/end each day and round-trip losses on discharge.
 A daily HiGHS mixed-integer optimisation minimises fees without simultaneous
 charging/discharging; multiple cycles are allowed, but no inter-day energy transfer.
+Hourly details and CSV export include local/UTC timestamps, signal, injection,
+battery charge/discharge, end-of-hour state of charge, fees and excluded-hour flags.
+An hour-of-day pattern shows the mean site signal and battery activity by local hour.
 
 ## Network config
 

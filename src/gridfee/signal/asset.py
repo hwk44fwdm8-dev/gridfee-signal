@@ -89,10 +89,29 @@ def asset_fees(
         for _, day in valid.groupby(days):
             injection.loc[day.index] = _battery_day(day, power_mw, energy_mwh, efficiency)
     fee = signal * injection
+    charge = (-injection).clip(lower=0) if kind == "battery" else injection * 0
+    discharge = injection.clip(lower=0) if kind == "battery" else injection * 0
+    soc = pd.Series(np.nan, index=signal.index)
+    if kind == "battery":
+        soc = (
+            (charge - discharge / efficiency)
+            .groupby(signal.index.tz_convert("Europe/Berlin").date)
+            .cumsum()
+        )
     moved = injection.abs().sum()
     total = float(fee.sum())
     return AssetResult(
-        pd.DataFrame({"injection_mw": injection, "signal": signal, "fee_eur": fee}),
+        pd.DataFrame(
+            {
+                "injection_mw": injection,
+                "signal": signal,
+                "fee_eur": fee,
+                "charge_mw": charge,
+                "discharge_mw": discharge,
+                "state_of_charge_mwh": soc,
+                "excluded": signal.isna(),
+            }
+        ),
         {
             "total_eur": total,
             "eur_per_mw": total / power_mw,

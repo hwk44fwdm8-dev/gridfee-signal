@@ -460,6 +460,28 @@ def _show_unserved(tables: ResultTables, day: date | None = None) -> None:
     )
 
 
+def _asset_export(hourly: pd.DataFrame) -> pd.DataFrame:
+    frame = hourly.reset_index(drop=True)
+    frame.insert(0, "timestamp_utc", hourly.index.tz_convert("UTC").map(lambda h: h.isoformat()))
+    frame.insert(
+        0, "timestamp_europe_berlin", hourly.index.tz_convert(TIMEZONE).map(lambda h: h.isoformat())
+    )
+    return frame
+
+
+def _asset_pattern(hourly: pd.DataFrame) -> pd.DataFrame:
+    local = hourly.index.tz_convert(TIMEZONE)
+    frame = hourly.assign(
+        hour_of_day=local.hour,
+        day=local.date,
+        charging=hourly["charge_mw"] > 1e-7,
+        discharging=hourly["discharge_mw"] > 1e-7,
+    )
+    means = frame.groupby("hour_of_day")["signal"].mean()
+    days = frame.groupby(["hour_of_day", "day"])[["charging", "discharging"]].any()
+    return means.to_frame("mean_signal").join(days.groupby("hour_of_day").sum()).reindex(range(24))
+
+
 def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
     zones = network.zones_frame()
     selected = st.selectbox(
@@ -483,7 +505,14 @@ def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
     years = ", ".join(map(str, sorted(set(hours.tz_convert(TIMEZONE).year))))
     st.subheader(f"Look-back: what this asset would have paid/earned in {years}")
     st.caption(
-        "Under the modelled fee signal, not a forecast. Positive EUR = pays; negative = earns."
+        "Positive (red): charging relieves congestion; feeding in adds to it. "
+        "Negative (blue): feeding in relieves congestion; charging adds to it. "
+        "This is a modeled signal, not a tariff or payment."
+    )
+    st.caption(
+        "Fee = signal × net feed-in (generation/battery discharge positive; load/battery "
+        "charge negative). Positive fee = asset would pay; negative = would be paid, "
+        "under this modelled signal. This look-back is not a forecast."
     )
     signal = tables.signal.reindex(index=hours, columns=zones.index).copy()
     if tables.unserved_mw is not None:
@@ -514,8 +543,45 @@ def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
             st.line_chart(result.hourly[["injection_mw"]])
     with geography:
         _map(zones, zone_summary(signal), selected)
+    st.subheader("Hourly details")
+    st.caption(
+        "One row per solved hour, not a daily mean. Times include UTC offsets for repeated "
+        "local hours. Battery state of charge is at the end of the hour; charge/discharge "
+        "columns are battery-only (zero for other assets)."
+    )
+    export = _asset_export(result.hourly)
+    st.dataframe(export)
+    st.download_button(
+        "Download hourly CSV",
+        export.to_csv(index=False).encode("utf-8"),
+        file_name=f"asset_{selected.replace('/', '_')}_{kind}.csv",
+        mime="text/csv",
+    )
+    st.subheader("Hour-of-day pattern (Europe/Berlin)")
+    pattern = _asset_pattern(result.hourly).rename_axis("hour_of_day").reset_index()
+    mean_chart = (
+        alt.Chart(pattern)
+        .mark_bar()
+        .encode(
+            x=alt.X("hour_of_day:O", title="Local hour of day"),
+            y=alt.Y("mean_signal:Q", title="Mean signal · EUR/MWh"),
+            color=alt.condition(
+                alt.datum.mean_signal >= 0, alt.value("#b2182b"), alt.value("#2166ac")
+            ),
+            tooltip=["hour_of_day:O", "mean_signal:Q", "charging:Q", "discharging:Q"],
+        )
+    )
+    st.altair_chart(mean_chart, width="stretch")
+    if kind == "battery":
+        st.bar_chart(pattern.set_index("hour_of_day")[["charging", "discharging"]])
+        st.caption(
+            "Charging/discharging: count of calendar days with activity in each local hour. "
+            "A repeated autumn clock-change hour counts at most once per day and direction."
+        )
     st.subheader("Monthly fees (EUR)")
-    monthly = result.hourly["fee_eur"].groupby(hours.strftime("%Y-%m")).sum(min_count=1)
+    monthly = (
+        result.hourly["fee_eur"].groupby(result.hourly.index.strftime("%Y-%m")).sum(min_count=1)
+    )
     st.dataframe(monthly.rename("Fee (EUR)"))
 
 
