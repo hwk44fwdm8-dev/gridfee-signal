@@ -23,10 +23,15 @@ def test_demo_filters_and_keeps_the_repeated_hour(monkeypatch):
     app = _app(monkeypatch)
     assert not app.exception
     assert "Synthetic demo" in app.info[0].value
-    assert [m.value for m in app.metric] == ["337", "334", "3"]
+    assert [m.value for m in app.metric][:3] == ["337", "334", "3"]
     assert app.metric[1].label == "Hours with fee-signal data"
     assert not app.warning
-    assert [tab.label for tab in app.tabs] == ["Fee signal", "Lines", "Unserved load"]
+    assert [tab.label for tab in app.tabs] == [
+        "Fee signal",
+        "Lines",
+        "Unserved load",
+        "Site and asset",
+    ]
     assert [heading.value for heading in app.subheader][:2] == [
         "Daily mean fee signal",
         "Zone locations",
@@ -39,14 +44,14 @@ def test_demo_filters_and_keeps_the_repeated_hour(monkeypatch):
     app.date_input[0].set_value((day,)).run()
     assert not app.exception
     assert app.metric[0].value == "337"
-    assert [box.value for box in app.selectbox] == ["S", "W-S"]
+    assert [box.value for box in app.selectbox][:2] == ["S", "W-S"]
 
     app.date_input[0].set_value((day, day))
     app.sidebar.number_input[0].set_value(100.0)
     app.run()
     assert not app.exception
     assert app.metric[0].value == "25"
-    assert [box.value for box in app.selectbox] == ["S", "W-S"]
+    assert [box.value for box in app.selectbox][:2] == ["S", "W-S"]
     assert (app.dataframe[0].value[["Positive hours", "Negative hours"]] == 0).all().all()
     assert app.dataframe[0].value[["charge_mean", "feed_in_mean"]].isna().all().all()
     assert "Hourly line loading" in [heading.value for heading in app.tabs[1].subheader]
@@ -111,9 +116,9 @@ def test_run_with_no_signal_hours_still_shows_unserved_load(monkeypatch, tmp_pat
 
     app = _app(monkeypatch, "--results", tmp_path, "--network", network_dir)
     assert not app.exception and not app.error
-    assert [m.value for m in app.metric] == ["1", "0", "1"]
+    assert [m.value for m in app.metric][:3] == ["1", "0", "1"]
     assert any("No internal-zone fee signal" in info.value for info in app.info)
-    lines, unserved = (frame.value for frame in app.dataframe)
+    lines, unserved = (frame.value for frame in app.dataframe[:2])
     assert lines["Priced hours"].isna().all()
     assert (lines["Peak loading"] > 0).all()
     assert unserved["Unserved load (MWh)"].sum() == 4
@@ -157,7 +162,7 @@ def test_warns_about_missing_fee_data_and_over_capacity(monkeypatch, tmp_path):
     args = _write_run(tmp_path, hours, fee_hours=hours[:3], flow=500.0)
     app = _app(monkeypatch, *args)
     assert not app.exception and not app.error
-    assert [m.value for m in app.metric] == ["23", "3", "20"]
+    assert [m.value for m in app.metric][:3] == ["23", "3", "20"]
     assert "20 solved hours are missing fee-signal data" in app.warning[0].value
     assert "exceed the supplied line capacities" in app.warning[1].value
 
@@ -167,10 +172,10 @@ def test_unserved_load_for_no_solve_and_distributed_shortfall(monkeypatch, tmp_p
     args = _write_run(tmp_path, hours, shed_hours=hours, fee_hours=hours[:0])
     app = _app(monkeypatch, *args)
     assert not app.exception and not app.warning
-    assert app.dataframe[-1].value["Unserved load (MWh)"].sum() == pytest.approx(0.0064)
+    assert app.tabs[2].dataframe[0].value["Unserved load (MWh)"].sum() == pytest.approx(0.0064)
     day = date(2023, 1, 2)
     app.date_input[0].set_value((day, day)).run()
-    assert [m.value for m in app.metric] == ["0", "0", "0"]
+    assert [m.value for m in app.metric][:3] == ["0", "0", "0"]
     assert app.tabs[2].info[0].value == "No solved hours for these dates."
 
 
@@ -203,7 +208,7 @@ def test_backcast_with_split_border_zones(monkeypatch, tmp_path, invalid_border)
         assert "load_shedding_mw does not match" in app.error[0].value
     else:
         assert not app.error
-        assert [m.value for m in app.metric] == ["2", "1", "1"]
+        assert [m.value for m in app.metric][:3] == ["2", "1", "1"]
         lines = app.dataframe[1].value
         assert lines.loc["A-X", "To"] == "X/50Hertz"
         assert lines.loc["C-X", "To"] == "X/Amprion"
@@ -218,3 +223,102 @@ def test_incomplete_launch_arguments_or_missing_files(monkeypatch, tmp_path):
     app = _app(monkeypatch, "--results", tmp_path, "--network", EXAMPLES / "three_zone")
     assert not app.exception
     assert "fee_signal.csv or fee_signal.parquet" in app.error[0].value
+
+
+def test_site_asset_demo_and_battery(monkeypatch):
+    app = _app(monkeypatch)
+    assert not app.exception
+    assert any(
+        "Look-back:" in heading.value and "2023" in heading.value for heading in app.subheader
+    )
+    app.selectbox[2].select("S")
+    app.selectbox[3].select("battery").run()
+    assert not app.exception
+    assert any("excluded (no signal / unserved): 3" in text.value for text in app.caption)
+    assert any("Hourly net injection" in heading.value for heading in app.subheader)
+    app.date_input[0].set_value((date(2023, 10, 29), date(2023, 10, 29))).run()
+    assert not app.exception
+    assert any("perfect foresight" in text.value for text in app.caption)
+    assert app.dataframe[-1].value.index.tolist() == ["2023-10"]
+    assert app.dataframe[-1].value.index.name == "Month"
+    hourly = app.dataframe[-2].value
+    assert len(hourly) == 25
+    assert hourly.timestamp_utc.nunique() == 25
+    assert "state_of_charge_mwh" in hourly
+    assert any("not a tariff or payment" in text.value for text in app.caption)
+    assert app.get("download_button")[0].label == "Download hourly CSV"
+    app.date_input[0].set_value((date(2023, 10, 30), date(2023, 10, 30))).run()
+    assert len(app.dataframe[-2].value) == 24
+
+
+def test_asset_pattern_counts_days_once_across_repeated_hour():
+    tables, _ = viewer._demo()
+    hours = tables.shadow_prices.index
+    frame = pd.DataFrame({"signal": 2.0, "charge_mw": 1.0, "discharge_mw": 0.0}, index=hours)
+    pattern = viewer._asset_pattern(frame)
+    assert pattern.loc[2, "charging"] == 14
+    assert pattern.loc[2, "mean_signal"] == 2
+    assert pattern["discharging"].eq(0).all()
+    assert viewer._asset_pattern(frame.iloc[:0])["mean_signal"].isna().all()
+
+
+def test_asset_map_selection_is_independent(monkeypatch):
+    tables, network = viewer._demo()
+    state = {
+        "zone_choice": "N",
+        "asset_site": "N",
+        "asset_map": {"selection": {"zone_pick": [{"zone_id": "S"}]}},
+    }
+    monkeypatch.setattr(viewer.st, "session_state", state)
+    monkeypatch.setattr(viewer.st, "caption", lambda *args, **kwargs: None)
+
+    def chart(*args, **kwargs):
+        assert kwargs["key"] == "asset_map"
+        kwargs["on_select"]()
+
+    monkeypatch.setattr(viewer.st, "altair_chart", chart)
+    viewer._map(
+        network.zones_frame(),
+        viewer.zone_summary(tables.signal),
+        "N",
+        None,
+        key="asset_map",
+        choice_key="asset_site",
+    )
+    assert state["asset_site"] == "S"
+    assert state["zone_choice"] == "N"
+    state["asset_map"]["selection"]["zone_pick"] = []
+    viewer._map(
+        network.zones_frame(),
+        viewer.zone_summary(tables.signal),
+        "S",
+        None,
+        key="asset_map",
+        choice_key="asset_site",
+    )
+    assert state["asset_site"] == "S"
+
+
+def test_asset_cache_reuses_results_and_invalidates_inputs(monkeypatch):
+    from unittest.mock import Mock
+
+    compute = Mock(wraps=viewer.asset_fees)
+    monkeypatch.setattr(viewer, "asset_fees", compute)
+    viewer._cached_asset_fees.clear()
+    hours = pd.date_range("2023-01-01", periods=2, freq="h", tz="Europe/Berlin")
+    signal = pd.Series([10.0, -10.0], index=hours)
+    args = ["N", signal, "battery", 1.0, 2.0, 0.9]
+    try:
+        first = viewer._cached_asset_fees(*args)
+        second = viewer._cached_asset_fees(*args)
+        pd.testing.assert_frame_equal(first.hourly, second.hourly)
+        assert compute.call_count == 1
+        for index, value in enumerate(["S", signal.iloc[:1], "load", 2.0, 3.0, 0.8]):
+            changed = args.copy()
+            changed[index] = value
+            viewer._cached_asset_fees(*changed)
+        changed_signal = signal + 1
+        viewer._cached_asset_fees("N", changed_signal, "battery", 1.0, 2.0, 0.9)
+        assert compute.call_count == 8
+    finally:
+        viewer._cached_asset_fees.clear()

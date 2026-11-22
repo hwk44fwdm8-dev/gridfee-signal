@@ -229,6 +229,19 @@ when present. Timestamps must include a UTC offset (for example
 `2023-01-01T00:00:00+01:00`). It does not rerun the model, write to the run directory, or send
 your results to a hosted service. Restart it after replacing files in the run.
 
+The **Site and asset** tab is a look-back on the selected dates, not a forecast:
+what a constant load, generator or battery would have paid/earned under that
+run's modelled fee signal. Positive fees mean the asset pays; negative fees mean
+it earns (signal × net injection, feed-in positive). Missing-signal and unserved
+hours are excluded. Battery operation is an idealised daily perfect-foresight
+best case, respecting chronological state of charge within the usable energy
+capacity, with empty start/end each day and round-trip losses on discharge.
+A daily HiGHS mixed-integer optimisation minimises fees without simultaneous
+charging/discharging; multiple cycles are allowed, but no inter-day energy transfer.
+Hourly details and CSV export include local/UTC timestamps, signal, injection,
+battery charge/discharge, end-of-hour state of charge, fees and excluded-hour flags.
+An hour-of-day pattern shows the mean site signal and battery activity by local hour.
+
 ## Network config
 
 A network is a directory with two CSV files. Lines starting with `#` are comments.

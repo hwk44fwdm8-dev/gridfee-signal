@@ -23,6 +23,7 @@ from gridfee.plots import (
     zone_summary,
 )
 from gridfee.plots.summary import TIMEZONE, hourly_unserved
+from gridfee.signal.asset import AssetResult, asset_fees
 from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
 
 
@@ -191,7 +192,13 @@ def _map_limit(signal: pd.DataFrame, zones: pd.DataFrame) -> float:
 
 
 def _map(
-    zones: pd.DataFrame, summary: pd.DataFrame, selected: str, fixed_limit: float | None
+    zones: pd.DataFrame,
+    summary: pd.DataFrame,
+    selected: str,
+    fixed_limit: float | None,
+    *,
+    key: str = "zone_map",
+    choice_key: str = "zone_choice",
 ) -> None:
     points = zones.join(summary).dropna(subset=["lat", "lon", "mean_signal"]).reset_index()
     if points.empty:
@@ -238,15 +245,15 @@ def _map(
     )
 
     def select_zone() -> None:
-        picked = st.session_state["zone_map"]["selection"]["zone_pick"]
+        picked = st.session_state[key]["selection"]["zone_pick"]
         if picked:
-            st.session_state.zone_choice = picked[0]["zone_id"]
+            st.session_state[choice_key] = picked[0]["zone_id"]
 
     chart = alt.layer(markers, labels).project(type="mercator").properties(height=290)
     st.altair_chart(
         chart,
         width="stretch",
-        key="zone_map",
+        key=key,
         on_select=select_zone,
         selection_mode="zone_pick",
     )
@@ -459,6 +466,155 @@ def _show_unserved(tables: ResultTables, day: date | None = None) -> None:
     )
 
 
+@st.cache_data(show_spinner="Computing asset fee look-back…", max_entries=64)
+def _cached_asset_fees(
+    site: str,
+    signal: pd.Series,
+    kind: str,
+    power_mw: float,
+    energy_mwh: float,
+    efficiency: float,
+) -> AssetResult:
+    return asset_fees(signal, kind, power_mw, energy_mwh, efficiency)
+
+
+def _asset_export(hourly: pd.DataFrame) -> pd.DataFrame:
+    frame = hourly.reset_index(drop=True)
+    frame.insert(0, "timestamp_utc", hourly.index.tz_convert("UTC").map(lambda h: h.isoformat()))
+    frame.insert(
+        0, "timestamp_europe_berlin", hourly.index.tz_convert(TIMEZONE).map(lambda h: h.isoformat())
+    )
+    return frame
+
+
+def _asset_pattern(hourly: pd.DataFrame) -> pd.DataFrame:
+    local = hourly.index.tz_convert(TIMEZONE)
+    frame = hourly.assign(
+        hour_of_day=local.hour,
+        day=local.date,
+        charging=hourly["charge_mw"] > 1e-7,
+        discharging=hourly["discharge_mw"] > 1e-7,
+    )
+    means = frame.groupby("hour_of_day")["signal"].mean()
+    days = frame.groupby(["hour_of_day", "day"])[["charging", "discharging"]].any()
+    return means.to_frame("mean_signal").join(days.groupby("hour_of_day").sum()).reindex(range(24))
+
+
+def _show_asset(
+    tables: ResultTables, network: ZoneNetwork, full_signal: pd.DataFrame | None = None
+) -> None:
+    zones = network.zones_frame()
+    selected = st.selectbox(
+        "Site",
+        zones.index,
+        format_func=lambda zone: f"{zones.at[zone, 'name']} ({zone})",
+        key="asset_site",
+    )
+    kind = st.selectbox("Asset kind", ["load", "generator", "battery"])
+    power = st.number_input("Power (MW)", min_value=0.01, value=1.0)
+    energy, efficiency = 0.0, 0.9
+    if kind == "battery":
+        energy = st.number_input("Energy capacity (MWh)", min_value=0.0, value=2.0)
+        efficiency = st.number_input(
+            "Round-trip efficiency", min_value=0.01, max_value=1.0, value=0.9
+        )
+        st.caption(
+            "Idealised best case: perfect foresight of each Europe/Berlin day's signal; "
+            "chronological state of charge stays within usable capacity and starts/ends "
+            "each day empty. No simultaneous charging/discharging; multiple cycles allowed. "
+            "Losses apply on discharge."
+        )
+    hours = tables.shadow_prices.index
+    years = ", ".join(map(str, sorted(set(hours.tz_convert(TIMEZONE).year))))
+    st.subheader(f"Look-back: what this asset would have paid/earned in {years}")
+    st.caption(
+        "Positive (red): charging relieves congestion; feeding in adds to it. "
+        "Negative (blue): feeding in relieves congestion; charging adds to it. "
+        "This is a modeled signal, not a tariff or payment."
+    )
+    st.caption(
+        "Fee = signal × net feed-in (generation/battery discharge positive; load/battery "
+        "charge negative). Positive fee = asset would pay; negative = would be paid, "
+        "under this modelled signal. This look-back is not a forecast."
+    )
+    signal = tables.signal.reindex(index=hours, columns=zones.index).copy()
+    if tables.unserved_mw is not None:
+        unserved = tables.unserved_mw.reindex(hours).sum(axis=1) > SHEDDING_TOLERANCE_MW
+        signal.loc[unserved] = np.nan
+    result = _cached_asset_fees(selected, signal[selected], kind, power, energy, efficiency)
+    summary = result.summary
+    metrics = st.columns(3)
+    for column, label, key in zip(
+        metrics,
+        ["Total fee (EUR)", "EUR per MW", "EUR per MWh moved"],
+        ["total_eur", "eur_per_mw", "eur_per_mwh_moved"],
+        strict=True,
+    ):
+        value = summary[key]
+        column.metric(label, f"{value:,.2f}" if pd.notna(value) else "N/A")
+    st.caption(
+        f"Hours paying: {summary['hours_paying']} · earning: {summary['hours_earning']} · "
+        f"neutral: {summary['hours_neutral']} · excluded (no signal / unserved): "
+        f"{summary['hours_excluded']}. MWh moved counts both charge and discharge."
+    )
+    history, geography = st.columns([3, 2])
+    with history:
+        st.subheader("Hourly asset fee (EUR)")
+        st.line_chart(result.hourly[["fee_eur"]])
+        if kind == "battery":
+            st.subheader("Hourly net injection (MW)")
+            st.line_chart(result.hourly[["injection_mw"]])
+    with geography:
+        _map(
+            zones,
+            zone_summary(signal),
+            selected,
+            None if full_signal is None else _map_limit(full_signal, zones),
+            key="asset_map",
+            choice_key="asset_site",
+        )
+    st.subheader("Hourly details")
+    st.caption(
+        "One row per solved hour, not a daily mean. Times include UTC offsets for repeated "
+        "local hours. Battery state of charge is at the end of the hour; charge/discharge "
+        "columns are battery-only (zero for other assets)."
+    )
+    export = _asset_export(result.hourly)
+    st.dataframe(export)
+    st.download_button(
+        "Download hourly CSV",
+        export.to_csv(index=False).encode("utf-8"),
+        file_name=f"asset_{selected.replace('/', '_')}_{kind}.csv",
+        mime="text/csv",
+    )
+    st.subheader("Hour-of-day pattern (Europe/Berlin)")
+    pattern = _asset_pattern(result.hourly).rename_axis("hour_of_day").reset_index()
+    mean_chart = (
+        alt.Chart(pattern)
+        .mark_bar()
+        .encode(
+            x=alt.X("hour_of_day:O", title="Local hour of day"),
+            y=alt.Y("mean_signal:Q", title="Mean signal · EUR/MWh"),
+            color=alt.condition(
+                alt.datum.mean_signal >= 0, alt.value("#b2182b"), alt.value("#2166ac")
+            ),
+            tooltip=["hour_of_day:O", "mean_signal:Q", "charging:Q", "discharging:Q"],
+        )
+    )
+    st.altair_chart(mean_chart, width="stretch")
+    if kind == "battery":
+        st.bar_chart(pattern.set_index("hour_of_day")[["charging", "discharging"]])
+        st.caption(
+            "Charging/discharging: count of calendar days with activity in each local hour. "
+            "A repeated autumn clock-change hour counts at most once per day and direction."
+        )
+    st.subheader("Monthly fees (EUR)")
+    monthly = (
+        result.hourly["fee_eur"].groupby(result.hourly.index.strftime("%Y-%m")).sum(min_count=1)
+    )
+    st.dataframe(monthly.rename_axis("Month").rename("Fee (EUR)"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results", type=Path, help="Finished run directory.")
@@ -522,13 +678,17 @@ def main() -> None:
             f"{len(missing):,} solved hours are missing fee-signal data and are not explained "
             "by the saved load shedding. Check that the fee-signal file is complete."
         )
-    signal_tab, lines_tab, unserved_tab = st.tabs(["Fee signal", "Lines", "Unserved load"])
+    signal_tab, lines_tab, unserved_tab, asset_tab = st.tabs(
+        ["Fee signal", "Lines", "Unserved load", "Site and asset"]
+    )
     with signal_tab:
         _show_signal(tables.signal, network, threshold, full_signal)
     with lines_tab:
         _show_lines(tables, network, day)
     with unserved_tab:
         _show_unserved(tables, day)
+    with asset_tab:
+        _show_asset(tables, network, full_signal)
 
 
 if __name__ == "__main__":
