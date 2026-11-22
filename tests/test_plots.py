@@ -158,3 +158,25 @@ def test_plot_command_reports_zone_missing_from_signal(tables, network_dir, tmp_
     )
     assert result.exit_code == 1
     assert "lacks the zones ['B']" in result.output
+
+
+def test_plot_results_without_signal_hours(tables, network_dir, tmp_path):
+    from gridfee.plots.figures import plot_results
+
+    empty = ResultTables(
+        tables.signal.iloc[:0], tables.shadow_prices, tables.flows_mw, tables.unserved_mw
+    )
+    paths = plot_results(empty, load_network(network_dir), tmp_path)
+    assert (tmp_path / "map_mean_signal.png") in paths
+
+
+def test_plot_results_removes_figures_that_no_longer_apply(tables, network_dir, tmp_path):
+    from gridfee.plots.figures import plot_results
+
+    network = load_network(network_dir)
+    plot_results(tables, network, tmp_path)
+    assert (tmp_path / "timeseries_unserved.png").exists()
+    served = ResultTables(tables.signal, tables.shadow_prices, tables.flows_mw, None)
+    paths = plot_results(served, network, tmp_path)
+    assert not (tmp_path / "timeseries_unserved.png").exists()
+    assert all(path.exists() for path in paths)
