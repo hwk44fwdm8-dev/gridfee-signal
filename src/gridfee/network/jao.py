@@ -191,3 +191,36 @@ def to_lines(circuits: pd.DataFrame) -> pd.DataFrame:
         }
     )
     return lines[lines["bus0"] != lines["bus1"]]
+
+
+TRANSFORMER_COLUMNS = (
+    ["name", "eic", "tso", "i_min", "i_max", "i_fixed", "primary_kv", "secondary_kv"]
+    + ["r", "x", "b", "g", "taps", "theta", "symmetrical", "phase_regulation", "angle_regulation"]
+    + ["comment"]
+)
+
+
+def read_transformers(workbook: str | Path) -> pd.DataFrame:
+    """The ``Transformers`` sheet of the German TSOs, with the substation of each row."""
+    frame = pd.read_excel(workbook, sheet_name="Transformers", header=None, skiprows=2)
+    frame = frame.iloc[:, : len(TRANSFORMER_COLUMNS)].set_axis(TRANSFORMER_COLUMNS, axis=1)
+    frame = frame[frame["eic"].notna() & frame["tso"].isin(GERMAN_TSOS)].copy()
+    for column in ("name", "eic", "tso"):
+        frame[column] = frame[column].astype(str).str.strip()
+    numeric = ["i_min", "i_max", "i_fixed", "primary_kv", "secondary_kv", "r", "x"]
+    frame[numeric] = frame[numeric].apply(pd.to_numeric, errors="coerce")
+    frame["substation"] = frame["name"].map(transformer_substation)
+    return frame
+
+
+def transformer_substation(name: str) -> str:
+    """The substation in a transformer's name, e.g. ``TR Audorf/S T422`` -> ``Audorf/S``."""
+    name = re.sub(r"^(TR|PST)\s*/?\s*(380-220kV\s*/)?\s*", "", name.strip())
+    for unit in (r"\s*/?\s*Trafo\s*\d+$", r"\s+220/400\s+\d+$", r"\s+(T|VK)?\d+[AB]?$", r"_\d+$"):
+        name = re.sub(unit, "", name)
+    return name.strip()
+
+
+def voltage_level(kilovolt: float) -> int:
+    """220 or 380: the level a nominal voltage (220 to 240, 380 to 410 kV) belongs to."""
+    return 380 if kilovolt >= 300 else 220
