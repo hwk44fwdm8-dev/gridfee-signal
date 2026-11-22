@@ -447,6 +447,17 @@ def backcast(
     hours: Path | None = typer.Option(
         None, help="CSV whose first column lists the hours to solve (default: all)."
     ),
+    block_hours: int | None = typer.Option(
+        None,
+        min=1,
+        help="Solve the hours in blocks of this many instead of as one problem. A network "
+        "of several hundred zones needs it: one problem for the year does not fit in "
+        "memory. Shadow prices and the fee signal are the same up to the solver's "
+        "tolerance. Default: one problem.",
+    ),
+    workers: int = typer.Option(
+        1, min=1, help="With --block-hours: processes that solve blocks side by side."
+    ),
     threshold: float = typer.Option(
         DEFAULT_THRESHOLD, help="Signals of at most this size (EUR/MWh) are neutral."
     ),
@@ -532,7 +543,9 @@ def backcast(
                     f"{len(unusable)} of the requested hours lack cross-border or generation "
                     f"data, e.g. {unusable[0]}"
                 )
-        result = run_backcast(network, inputs, subset, load_shedding_cost, threshold)
+        result = run_backcast(
+            network, inputs, subset, load_shedding_cost, threshold, block_hours, workers
+        )
         opf = result.opf
         _write_opf(opf, out)
         write_signal(result.signal, out, file_format)

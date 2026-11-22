@@ -624,6 +624,8 @@ def run_backcast(
     hours: Sequence | None = None,
     load_shedding_cost: float | None = None,
     threshold: float = 0.0,
+    block_hours: int | None = None,
+    workers: int = 1,
 ) -> BackcastResult:
     """Solve the DC OPF for the backcast and compute the fee signal.
 
@@ -635,6 +637,9 @@ def run_backcast(
 
     Hours with unserved load are not part of the signal: their shadow prices are
     set by ``load_shedding_cost``, not by the data. They stay in ``opf``.
+
+    ``block_hours`` and ``workers`` are those of :func:`gridfee.flows.run_dc_opf`:
+    a large network needs the year solved in blocks of hours.
     """
     opf = run_dc_opf(
         network,
@@ -645,6 +650,8 @@ def run_backcast(
         snapshots=hours,
         load_shedding_cost=load_shedding_cost,
         ptdf_reference=inputs.ptdf_reference,
+        block_hours=block_hours,
+        workers=workers,
     )
     ptdf = opf.ptdf[network.internal_zone_ids]
     prices = opf.shadow_prices
