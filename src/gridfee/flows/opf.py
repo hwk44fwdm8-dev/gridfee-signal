@@ -303,7 +303,9 @@ def _solve_block(
     if not pst.empty:
         power = n.links_t.p0[pst.index]
         flows[pst.index] += power
-        shadow[pst.index] = -(
+        # Raising capacity_mw raises the combined limit and the relaxed Line-s limit,
+        # which binds too when the shift is at its lower bound.
+        shadow[pst.index] -= (
             n.model.constraints["PST-upper"].dual.to_pandas()
             + n.model.constraints["PST-lower"].dual.to_pandas()
         )
