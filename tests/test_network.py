@@ -125,3 +125,50 @@ def test_quoted_values_and_empty_file(tmp_path):
     assert network.zones[0].name == "Zone A, north"
     with pytest.raises(NetworkConfigError, match="no header row"):
         load_network(_network_dir(tmp_path, zones="# only a comment\n"))
+
+
+NETWORKS = Path(__file__).parents[1] / "data" / "networks"
+
+
+def _rows(path):
+    import csv
+
+    with path.open(encoding="utf-8") as file:
+        return list(csv.DictReader(line for line in file if not line.startswith("#")))
+
+
+def test_de38_has_the_38_regions_of_de22_with_the_same_tso():
+    de22, de38 = load_network(NETWORKS / "de22"), load_network(NETWORKS / "de38")
+    region_zone = {row["nuts2"]: row["zone_id"] for row in _rows(NETWORKS / "de22/zone_nuts2.csv")}
+
+    assert sorted(de38.internal_zone_ids) == sorted(region_zone)
+    assert len(de38.internal_zone_ids) == 38
+    assert {
+        region: de22.zone_to_tso[zone] for region, zone in region_zone.items()
+    } == de38.zone_to_tso
+    assert sorted(de38.boundary_zone_ids) == sorted(de22.boundary_zone_ids)
+
+
+def test_every_ac_line_of_de38_is_made_of_circuits_that_jao_lists():
+    lines = {row["line_id"]: row for row in _rows(NETWORKS / "de38/lines.csv")}
+    parts = {row["line_id"]: row for row in _rows(NETWORKS / "de38/lines_parts.csv")}
+    circuits = _rows(NETWORKS / "de38/jao_circuits.csv")
+    listed = {row["line_id"] for row in circuits}
+
+    assert len({row["eic"] for row in circuits}) == len(circuits)
+    assert {row["limit_kind"] for row in circuits} <= {"fixed", "period", "dlr_max"}
+    ac = {line for line, row in parts.items() if float(row["ac_rating_mva"]) > 0}
+    assert ac == listed
+    assert set(lines) - ac == {"BE-DEA2", "DE80-DK2", "DEF0-NO2", "DEF0-SE4"}  # DC only
+    for line in listed:
+        assert int(parts[line]["circuits"]) == sum(row["line_id"] == line for row in circuits)
+        rating = float(parts[line]["ac_rating_mva"]) * 0.7 + float(parts[line]["dc_rating_mw"])
+        assert float(lines[line]["capacity_mw"]) == pytest.approx(rating, abs=0.11)
+
+
+def test_jao_places_only_name_zones_of_de38():
+    zones = set(load_network(NETWORKS / "de38").zone_ids)
+    places = _rows(NETWORKS / "de38/jao_places.csv")
+    assert {row["value"] for row in places if row["kind"] == "zone"} <= zones
+    assert {row["kind"] for row in places} == {"alias", "zone"}
+    assert all(row["basis"] for row in places)

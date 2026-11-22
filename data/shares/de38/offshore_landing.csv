@@ -1,0 +1,10 @@
+# ASSUMPTION: the NUTS2 region where offshore wind comes ashore; the 38-region version
+# of ../offshore_landing.csv, with the same caveats. Baltic Sea: Mecklenburg-Vorpommern
+# (DE80). North Sea areas N-4 and N-5: Schleswig-Holstein (DEF0). Everything else in
+# the North Sea: Weser-Ems (DE94), not Lueneburg (DE93). Written from general knowledge
+# of the grid connections and not checked against a TSO or BSH document.
+sea,area,zone_id
+Ostsee,*,DE80
+Nordsee,N-4,DEF0
+Nordsee,N-5,DEF0
+Nordsee,*,DE94

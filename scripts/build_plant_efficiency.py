@@ -37,8 +37,10 @@ HEADER = """\
 """
 
 
-def plant_zones(plants: pd.DataFrame, nuts_file: Path) -> pd.Series:
-    zone_of_nuts = pd.read_csv(DE22 / "zone_nuts2.csv", comment="#").set_index("nuts2")["zone_id"]
+def plant_zones(plants: pd.DataFrame, nuts_file: Path, network: Path = DE22) -> pd.Series:
+    zone_of_nuts = pd.read_csv(network / "zone_nuts2.csv", comment="#").set_index("nuts2")[
+        "zone_id"
+    ]
     regions = gpd.read_file(nuts_file).set_index("NUTS_ID").loc[zone_of_nuts.index, ["geometry"]]
     zones = regions.assign(zone_id=zone_of_nuts).dissolve("zone_id")
     points = gpd.GeoDataFrame(
@@ -74,6 +76,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--plants", type=Path, required=True)
     parser.add_argument("--nuts", type=Path, required=True)
+    parser.add_argument(
+        "--network", type=Path, default=DE22, help="Network directory with zone_nuts2.csv."
+    )
+    parser.add_argument("--out", type=Path, default=OUT)
     args = parser.parse_args()
 
     plants = pd.read_csv(args.plants)
@@ -82,10 +88,12 @@ def main() -> None:
         efficiency=plants["efficiency_data"].fillna(plants["efficiency_estimate"]),
         capacity=plants["capacity_net_bnetza"],
     ).dropna(subset=["efficiency", "capacity", "lat", "lon"])
-    plants["zone_id"] = plant_zones(plants, args.nuts)
-    internal = pd.read_csv(DE22 / "zone_nuts2.csv", comment="#")["zone_id"].drop_duplicates()
+    plants["zone_id"] = plant_zones(plants, args.nuts, args.network)
+    internal = pd.read_csv(args.network / "zone_nuts2.csv", comment="#")[
+        "zone_id"
+    ].drop_duplicates()
     classes = efficiency_classes(plants, sorted(internal))
-    OUT.write_text(HEADER + classes.to_csv(index=False))
+    args.out.write_text(HEADER + classes.to_csv(index=False))
     summary = plants.groupby("energy_source").apply(
         lambda p: pd.Series(
             {
@@ -98,7 +106,7 @@ def main() -> None:
         )
     )
     print(summary.round(3).to_string())
-    print(f"wrote {OUT} ({len(classes)} rows)")
+    print(f"wrote {args.out} ({len(classes)} rows)")
 
 
 if __name__ == "__main__":

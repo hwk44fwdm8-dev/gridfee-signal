@@ -20,12 +20,24 @@ The assignment of buses to zones used NUTS 2021 boundaries from Eurostat GISCO
 (© EuroGeographics for the administrative boundaries). No boundary data is included
 in this repository.
 
+## `data/networks/de38/`
+
+`lines.csv` and `lines_parts.csv` are computed from JAO's Core Static Grid Model,
+3rd release (<https://www.jao.eu/static-grid-model>, © JAO and the Core TSOs, not under
+an open licence): per pair of regions, the summed rating and the combined reactance of
+the circuits between them. The workbook and the map are not included, and the files do
+not repeat a circuit's current or reactance. `jao_circuits.csv` names the circuits by
+their EIC code, and `jao_places.csv` and `jao_corrections.csv` name substations and
+circuits as the workbook does. The ratings of the DC links and the coordinates in
+`zones.csv` are derived from PyPSA-Eur's OpenStreetMap network as for `de22` (ODbL 1.0,
+© OpenStreetMap contributors). Region names and codes: NUTS 2021, Eurostat.
+
 ## SMARD
 
 Data downloaded by `gridfee collect` comes from SMARD (Bundesnetzagentur, CC BY 4.0)
 and is not stored in the repository.
 
-## `data/shares/`
+## `data/shares/` (also `data/shares/de38/`)
 
 `population_shares.csv` is derived from Eurostat's table `demo_r_d2jan` (© European
 Union; Eurostat data may be reused with the source named).
@@ -58,7 +70,7 @@ https://doi.org/10.25832/conventional_power_plants/2020-10-01 (primary data: BNe
 Kraftwerksliste, Umweltbundesamt, and efficiencies researched by OPSD). The data package
 asks for this attribution and states no licence.
 
-## `data/weather/`
+## `data/weather/` (also `data/weather/de38/`)
 
 `capacity_factors_2023.csv` was generated using Copernicus Climate Change Service
 information (2026): ERA5 hourly data on single levels, Hersbach et al.,

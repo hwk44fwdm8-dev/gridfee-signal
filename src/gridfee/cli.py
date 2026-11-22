@@ -27,7 +27,13 @@ from gridfee.flows import OPFError, OPFResult, run_dc_opf
 from gridfee.injections import build_historical_injections, check_energy_balance, read_shares
 from gridfee.injections.weather import read_capacity_factors
 from gridfee.network import NetworkConfigError, ZoneNetwork, load_network, load_zones
-from gridfee.signal import NEUTRAL, SignalError, compute_fee_signal, write_signal
+from gridfee.signal import (
+    NEUTRAL,
+    SignalError,
+    aggregate_signal,
+    compute_fee_signal,
+    write_signal,
+)
 from gridfee.validation import (
     FAIL,
     ValidationError,
@@ -406,6 +412,17 @@ def backcast(
         DEFAULT_THRESHOLD, help="Signals of at most this size (EUR/MWh) are neutral."
     ),
     file_format: str = typer.Option("csv", "--format", help="Fee signal as csv or parquet."),
+    report_zones: Path | None = typer.Option(
+        None,
+        help="CSV with zone_id and nuts2 (data/networks/de22/zone_nuts2.csv): also write the "
+        "fee signal for these zones, each the mean of the network's zones in the nuts2 "
+        "column, as fee_signal_report*. Needs --report-weights.",
+    ),
+    report_weights: Path | None = typer.Option(
+        None,
+        help="CSV with zone_id and population per zone of the network "
+        "(data/shares/de38/capacity_by_zone.csv): the weights of that mean.",
+    ),
     wind_tolerance: float = typer.Option(0.10, help="Allowed deviation of the wind north share."),
     flow_tolerance: float = typer.Option(
         0.10, help="Allowed deviation of the net export per neighbour."
@@ -480,6 +497,20 @@ def backcast(
         opf = result.opf
         _write_opf(opf, out)
         write_signal(result.signal, out, file_format)
+        if report_zones is not None:
+            if report_weights is None:
+                raise BackcastError("--report-zones needs --report-weights")
+            groups = pd.read_csv(report_zones, comment="#", dtype=str).rename(
+                columns={"zone_id": "report_zone", "nuts2": "zone_id"}
+            )
+            weight = pd.read_csv(report_weights, comment="#", dtype={"zone_id": str})
+            groups["weight"] = groups["zone_id"].map(weight.set_index("zone_id")["population"])
+            missing = sorted(set(network.internal_zone_ids) - set(groups["zone_id"]))
+            if missing:
+                raise BackcastError(f"{report_zones.name} does not list the zones {missing}")
+            write_signal(
+                aggregate_signal(result.signal, groups), out, file_format, "fee_signal_report"
+            )
         inputs.clipped_exchange.to_csv(out / "clipped_exchange.csv", index=False)
         pd.Series(inputs.skipped_hours, name="hour").to_csv(out / "skipped_hours.csv", index=False)
 
@@ -501,8 +532,9 @@ def backcast(
         notes = [
             f"{len(opf.flows_mw)} hours solved; {len(inputs.skipped_hours)} hours of the year "
             "left out because cross-border flows or national generation are missing.",
-            "The line capacities and susceptances are an ASSUMPTION derived from PyPSA-Eur's "
-            "OpenStreetMap-based network, not TSO data (docs/NETWORK.md).",
+            f"The lines are those of {network_dir}; the header of its lines.csv says where "
+            "their capacities and susceptances come from and what in them is an ASSUMPTION "
+            "(docs/NETWORK.md).",
         ]
         if placeholders:
             notes.append(

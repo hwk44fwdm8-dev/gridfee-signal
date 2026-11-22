@@ -10,7 +10,9 @@ from gridfee.signal import (
     NEGATIVE,
     NEUTRAL,
     POSITIVE,
+    FeeSignal,
     SignalError,
+    aggregate_signal,
     classify_signal,
     compute_fee_signal,
     write_signal,
@@ -173,3 +175,59 @@ def test_cli_signal_accepts_a_line_called_na(tmp_path):
     assert result.exit_code == 0, result.output
     signal = pd.read_csv(tmp_path / "fee_signal.csv", index_col=0)
     assert signal.loc["h1"].tolist() == [0.0, -40.0]
+
+
+def test_aggregate_signal_is_the_weighted_mean_of_the_zones():
+    signal = pd.DataFrame(
+        {"N1": [30.0, 0.0], "N2": [-10.0, 0.0], "N3": [5.0, 0.0], "FR": [7.0, 0.0]},
+        index=pd.Index(["h1", "h2"], name="snapshot"),
+    )
+    result = aggregate_signal(
+        FeeSignal(signal, classify_signal(signal, 1.0), 1.0),
+        pd.DataFrame(
+            {
+                "zone_id": ["N1", "N2", "N3"],
+                "report_zone": ["Z1", "Z1", "Z2"],
+                "weight": [1.0, 3.0, 2.0],
+            }
+        ),
+    )
+    assert list(result.signal.columns) == ["Z1", "Z2", "FR"]
+    # (1 * 30 + 3 * -10) / 4 = 0: opposite signs inside a reporting zone cancel.
+    assert result.signal.loc["h1"].tolist() == pytest.approx([0.0, 5.0, 7.0])
+    assert result.classification.loc["h1"].tolist() == [NEUTRAL, POSITIVE, POSITIVE]
+    assert (result.classification.loc["h2"] == NEUTRAL).all()
+    assert result.threshold == 1.0
+
+
+@pytest.mark.parametrize(
+    ("zone_ids", "weights", "message"),
+    [
+        (["N1", "N1"], [1.0, 1.0], "twice"),
+        (["N1", "N9"], [1.0, 1.0], "without a signal"),
+        (["N1", "N2"], [1.0, 0.0], "positive"),
+    ],
+)
+def test_aggregate_signal_rejects_bad_groups(zone_ids, weights, message):
+    signal = pd.DataFrame({"N1": [1.0], "N2": [2.0]}, index=pd.Index(["h1"]))
+    groups = pd.DataFrame({"zone_id": zone_ids, "report_zone": "Z1", "weight": weights})
+    with pytest.raises(SignalError, match=message):
+        aggregate_signal(FeeSignal(signal, classify_signal(signal), 0.0), groups)
+
+
+def test_aggregate_signal_rejects_a_zone_without_reporting_zone():
+    signal = pd.DataFrame({"N1": [1.0], "N2": [2.0]}, index=pd.Index(["h1"]))
+    groups = pd.DataFrame({"zone_id": ["N1", "N2"], "report_zone": ["Z1", None], "weight": 1.0})
+    message = "lacks its zone or reporting zone"
+    with pytest.raises(SignalError, match=message):
+        aggregate_signal(FeeSignal(signal, classify_signal(signal), 0.0), groups)
+
+
+def test_write_signal_with_another_stem(tmp_path):
+    result = compute_fee_signal(SHADOW, PTDF)
+    paths = write_signal(result, tmp_path, stem="fee_signal_report")
+    assert [p.name for p in paths] == [
+        "fee_signal_report.csv",
+        "fee_signal_report_class.csv",
+        "fee_signal_report_summary.csv",
+    ]

@@ -39,13 +39,15 @@ NORTH, SOUTH, WEST, EAST = 55.25, 47.0, 5.5, 15.25
 
 
 def grid_point_zones(
-    latitude: np.ndarray, longitude: np.ndarray, nuts_file: Path
+    latitude: np.ndarray, longitude: np.ndarray, nuts_file: Path, network: Path = DE22
 ) -> tuple[pd.Series, dict[str, tuple[float, float]]]:
     """Zone of every grid point inside a zone, indexed by (latitude, longitude).
 
     Also returns, for zones too small to hold a grid point, the point nearest to them.
     """
-    zone_of_nuts = pd.read_csv(DE22 / "zone_nuts2.csv", comment="#").set_index("nuts2")["zone_id"]
+    zone_of_nuts = pd.read_csv(network / "zone_nuts2.csv", comment="#").set_index("nuts2")[
+        "zone_id"
+    ]
     regions = gpd.read_file(nuts_file).set_index("NUTS_ID").loc[zone_of_nuts.index, ["geometry"]]
     zones = regions.assign(zone_id=zone_of_nuts).dissolve("zone_id")
     lat, lon = np.meshgrid(latitude, longitude, indexing="ij")
@@ -76,6 +78,9 @@ def main() -> None:
     parser.add_argument("--year", type=int, required=True)
     parser.add_argument("--nuts", type=Path, required=True)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument(
+        "--network", type=Path, default=DE22, help="Network directory with zone_nuts2.csv."
+    )
     parser.add_argument("--workers", type=int, default=16)
     args = parser.parse_args()
     out = args.out or ROOT / "data" / "weather" / f"capacity_factors_{args.year}.csv"
@@ -89,7 +94,7 @@ def main() -> None:
     data = load_days(area, days, args.workers)
 
     cell_zone, substitutes = grid_point_zones(
-        data.latitude.values, data.longitude.values, args.nuts
+        data.latitude.values, data.longitude.values, args.nuts, args.network
     )
 
     def per_zone(cell_factors: pd.DataFrame) -> pd.DataFrame:

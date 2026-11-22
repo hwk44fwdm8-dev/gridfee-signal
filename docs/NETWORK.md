@@ -121,8 +121,8 @@ How the circuits were matched, and what remains an assumption:
   as the two JAO circuits. The zone of each substation follows from its location
   (Lauchstädt, Wolmirstedt: Sachsen-Anhalt; Vieselbach: Thüringen; Helmstedt:
   Niedersachsen-Süd; Bürstadt: Hessen; Rheinau, Daxlanden, GKM: BW-Karlsruhe;
-  Maximiliansau, Weingarten, Mutterstadt: Rheinland-Pfalz). The coordinates in JAO's
-  map file are schematic and were not used.
+  Maximiliansau, Weingarten, Mutterstadt: Rheinland-Pfalz). JAO's map was not used
+  for these four lines.
 - **`DE17-DE20` does not match one to one.** JAO lists the 380 kV circuit
   Daxlanden–Weingarten as a tie-line between Amprion and TransnetBW; in the
   OpenStreetMap data that circuit ends west of the Rhine and does not reach the zone
@@ -144,6 +144,78 @@ How the circuits were matched, and what remains an assumption:
 
 The workbook is not in this repository (JAO's terms restrict reproduction); the ten
 rows above are quoted with their source.
+
+## The 38-region network of Germany (`data/networks/de38/`)
+
+The same model one level finer: each of Germany's 38 NUTS2 regions is a zone (the zone
+id is the NUTS2 code, so `DE11` here is Stuttgart, not zone `DE11` of the 22-zone
+network), with the same boundary zones and the same TSO per region as its zone in
+`de22`. Every AC line is built from the circuits that the four German TSOs publish in
+JAO's Core Static Grid Model (workbook of 1 March 2023): 96 lines, 75 of them between
+two German regions, from 304 circuits that cross a region border (211 at 380 kV, 93 at
+220 kV). It is rebuilt by `scripts/derive_de38_network.py`.
+
+**What is TSO data and what is not.** Published per circuit: the two substations, the
+voltage, the reactance and the maximum current. Not published, and so assumptions of
+this project: where each substation is, the 0.7 security margin, and that all circuits
+between two regions act as one line.
+
+How a line is made:
+
+1. **Circuits.** All rows of the German TSOs in the sheets `Lines` and `Tielines`. A
+   tie line is listed by the TSO on each side under one EIC code; the lower limit and
+   the larger reactance count (some TSOs give their share up to the border).
+2. **Limit.** `Fixed` if given, else the lowest of `Period 1` to `6`, else `DLRmax(A)`,
+   the upper end of the weather-dependent rating. `jao_circuits.csv` says which was
+   used per circuit: of the 304, 144 fixed, 79 seasonal and 81 `DLRmax`. For 16 lines
+   every circuit is `DLRmax`, so their capacity is an upper bound.
+3. **Place of each substation.** The workbook has no coordinates. Substations are placed
+   by JAO's map of the same publication (median over the circuits that end there) and
+   then by NUTS2 region. Checked against the substations in the OpenStreetMap data:
+   half of the 451 map positions are within 0.6 km of one, a tenth are more than 8 km
+   off. Eight substations that the map puts on the wrong side of a region border are
+   placed by hand in `jao_places.csv`, with the reason; so are the foreign ends of tie
+   lines (by country) and names the two TSOs of a tie line spell differently.
+4. **Tee points.** A circuit with a tee is listed as one row per leg, to a point named
+   `Y-<substation>`. The map draws these schematically, so a tee point is put in the
+   region of the substation at the end of its shortest leg. Ends less than 1 km apart
+   count as one place. One tee is listed with a wrong end name and is corrected in
+   `jao_corrections.csv`.
+5. **Aggregation** as in the 22-zone network: ratings add up, reactances combine in
+   parallel after scaling to the distance between the region centres, and
+   `capacity_mw = 0.7 x sum of sqrt(3) x voltage x maximum current`.
+6. **DC links** (to Belgium, Denmark East, Norway, Sweden) keep the rating from the
+   OpenStreetMap data, because JAO gives a cable's current, not the converter's power.
+
+Compared with the same 38 regions derived from OpenStreetMap as for `de22`
+(`derive_de22_network.py --network de38` writes that version): 84 AC lines exist in
+both, and for 52 of them the two capacities are within 25 % of each other. Summed over
+the 84, the JAO capacity is 15 % lower. Eight lines exist only in the JAO version and
+one only in the OpenStreetMap version; these are long circuits that pass through a
+third region, or substations near a border that the two sources place differently.
+
+Limits of this network, beyond those of `de22`:
+
+- **A wrong region for one substation moves whole circuits to another line.** The check
+  against OpenStreetMap found eight; others near a border can remain. The first run
+  showed what one does: with Würgassen placed near Kassel, the line
+  Kassel–Braunschweig was priced in 715 hours of 2023; placed correctly it does not
+  exist.
+- **Weak lines decide.** 16 of the 75 lines between German regions are a single circuit
+  and the smallest is 211 MW. In the DC model such a line in parallel to strong ones
+  is full first and then limits the flow on the strong ones too. Operators avoid this
+  with switching and phase shifters, which the model does not have.
+- **Lines between regions that do not touch** exist (Mecklenburg-Vorpommern–Berlin, for
+  example): one circuit that passes through a third region without a substation there.
+- **Tie lines.** The observed flow to a neighbour exceeds 0.7 times the published limit
+  in many hours (Netherlands from TenneT in 591 hours, France from TransnetBW in 254,
+  with flows up to 0.9 and 1.0 times the published limit), so the 0.7 is too low
+  there. The backcast cuts the flow to the capacity and reports it.
+- **One publication.** The limits are those of March 2023 for the whole year.
+
+The workbook and the map are not in this repository (JAO's terms restrict
+reproduction). `jao_circuits.csv` lists the circuits behind each line by EIC code, so
+every capacity can be recomputed from the workbook; it does not repeat the currents.
 
 For your own network, `gridfee.network.pypsa_eur.derive_zone_lines(buses, lines, links,
 busmap)` does steps 3 to 5 for any busmap.

@@ -618,3 +618,36 @@ def test_hours_with_unserved_load_are_not_part_of_the_signal():
     assert unserved.any()
     assert result.signal.signal.index.equals(unserved.index[~unserved])
     assert result.opf.shadow_prices.index.equals(unserved.index)
+
+
+def test_cli_backcast_also_writes_the_signal_for_reporting_zones(tmp_path):
+    _write_tables(tmp_path / "raw")
+    _write_network(tmp_path / "net")
+    (tmp_path / "zones.csv").write_text("zone_id,nuts2\nZ,N\nZ,S\n")
+    (tmp_path / "weights.csv").write_text("zone_id,population\nN,100\nS,300\n")
+    common = ["backcast", "--year", "2023", "--network", str(tmp_path / "net"), "--data"]
+    common += [str(tmp_path / "raw"), "--residual-cost", "40", "--out", str(tmp_path / "out")]
+
+    CliRunner().invoke(
+        app,
+        [*common, "--report-zones", str(tmp_path / "zones.csv")]
+        + ["--report-weights", str(tmp_path / "weights.csv")],
+    )
+
+    report = pd.read_csv(tmp_path / "out" / "fee_signal_report.csv", index_col=0)
+    assert list(report.columns) == ["Z"]
+    # (100 * 30 + 300 * -10) / 400
+    assert report.iloc[1].round(6).tolist() == [0.0]
+    labels = pd.read_csv(tmp_path / "out" / "fee_signal_report_class.csv", index_col=0)
+    assert labels.iloc[1].tolist() == ["neutral"]
+    assert (tmp_path / "out" / "fee_signal_report_summary.csv").exists()
+
+    alone = CliRunner().invoke(app, [*common, "--report-zones", str(tmp_path / "zones.csv")])
+    assert "--report-zones needs --report-weights" in alone.output
+    (tmp_path / "zones.csv").write_text("zone_id,nuts2\nZ,N\n")
+    partial = CliRunner().invoke(
+        app,
+        [*common, "--report-zones", str(tmp_path / "zones.csv")]
+        + ["--report-weights", str(tmp_path / "weights.csv")],
+    )
+    assert "does not list the zones ['S']" in partial.output

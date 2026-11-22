@@ -35,6 +35,12 @@ Those figures are with estimated ratings for every line. With the maximum curren
 that JAO publishes for the four priced lines (now in `data/networks/de22/lines.csv`),
 the signal is not neutral in 21 hours (0.2 %) and no hour has unserved load.
 
+On the 38 NUTS2 regions with published limits on every line (`data/networks/de38`) the
+signal is not neutral in 1,007 hours (12 %), which hold 30 % of the redispatch
+volume of the hours solved; three weak lines carry most of it and 386 hours have unserved load. The signal
+is also written for the 22 zones (`--report-zones`), where it averages over regions
+that often have opposite signs.
+
 ## Quick start
 
 Python 3.11 or newer.
@@ -188,6 +194,9 @@ from PyPSA-Eur.
 
 - The 22-zone lines are an assumption derived from OpenStreetMap-based data, and DC
   cables are treated as lines; see [docs/NETWORK.md](docs/NETWORK.md).
+- The 38-region lines use published currents and reactances, but where each substation
+  is, the 0.7 margin and one line per pair of regions are assumptions; single weak
+  circuits then decide much of the result.
 - The backcast is not a market model, and its zone shares are placeholders unless the
   files in `data/shares/` are passed; see
   [docs/METHODOLOGY.md](docs/METHODOLOGY.md).

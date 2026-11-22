@@ -213,6 +213,24 @@ to industry. Each zone still belongs to one TSO zone only (see above).
 The order of gas and lignite depends on these choices: with a gas efficiency of 0.52
 instead of 0.57, gas would cost more than lignite.
 
+### The same files for the 38-region network
+
+`data/shares/de38/` and `data/weather/de38/` hold the same files with one zone per NUTS2
+region, from the same sources and snapshots. The scripts take the network as an
+argument:
+
+```bash
+python scripts/build_zone_shares.py --mastr mastr/ --network data/networks/de38 --shares data/shares/de38
+python scripts/build_plant_efficiency.py --plants <csv> --nuts <geojson> \
+    --network data/networks/de38 --out data/shares/de38/plant_efficiency.csv
+python scripts/build_capacity_factors.py --year 2023 --nuts <geojson> \
+    --network data/networks/de38 --out data/weather/de38/capacity_factors_2023.csv
+```
+
+`data/shares/de38/offshore_landing.csv` puts North Sea wind outside the areas N-4 and
+N-5 in Weser-Ems rather than Lüneburg; like the 22-zone file it is an assumption.
+Bremen has no ERA5 grid point inside it and takes the nearest one.
+
 ### Plant efficiency classes, monthly prices and observed bounds (ASSUMPTION)
 
 `gridfee backcast --plant-efficiency ... --fuel-prices ...` (with `--generation-shares`
