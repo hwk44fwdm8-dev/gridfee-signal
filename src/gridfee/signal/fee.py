@@ -92,7 +92,8 @@ def aggregate_signal(result: FeeSignal, groups: pd.DataFrame) -> FeeSignal:
     """Fee signal of reporting zones that are each made of several solved zones.
 
     ``groups`` has one row per solved zone: ``zone_id``, ``report_zone`` and
-    ``weight`` (> 0). The signal of a reporting zone is the weighted mean of the
+    ``weight`` (>= 0, not all zero in a reporting zone; a zone with weight 0, such
+    as a bus without load, does not count). The signal of a reporting zone is the weighted mean of the
     signals of its zones, hour by hour, classified with the same threshold. Zones
     that ``groups`` does not list (the boundary zones) are passed through.
 
@@ -107,9 +108,12 @@ def aggregate_signal(result: FeeSignal, groups: pd.DataFrame) -> FeeSignal:
     unknown = sorted(set(groups["zone_id"]) - set(result.signal.columns))
     if unknown:
         raise SignalError(f"reporting groups name zones without a signal: {unknown}")
-    if not (groups["weight"] > 0).all():
-        raise SignalError("weights of the reporting groups must be positive")
     grouped = groups.set_index("zone_id")
+    total = grouped.groupby("report_zone")["weight"].sum()
+    if not (groups["weight"] >= 0).all() or not (total > 0).all():
+        raise SignalError(
+            "weights of the reporting groups must not be negative, nor all zero in a zone"
+        )
     weights = grouped["weight"] / grouped.groupby("report_zone")["weight"].transform("sum")
     weighted = result.signal[grouped.index] * weights
     report = weighted.T.groupby(grouped["report_zone"]).sum().T
