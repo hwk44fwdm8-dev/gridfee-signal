@@ -23,6 +23,7 @@ from gridfee.plots import (
     zone_summary,
 )
 from gridfee.plots.summary import TIMEZONE, hourly_unserved
+from gridfee.signal.asset import asset_fees
 from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
 
 
@@ -459,6 +460,64 @@ def _show_unserved(tables: ResultTables, day: date | None = None) -> None:
     )
 
 
+def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
+    zones = network.zones_frame()
+    selected = st.selectbox(
+        "Site", zones.index, format_func=lambda zone: f"{zones.at[zone, 'name']} ({zone})"
+    )
+    kind = st.selectbox("Asset kind", ["load", "generator", "battery"])
+    power = st.number_input("Power (MW)", min_value=0.01, value=1.0)
+    energy, efficiency = 0.0, 0.9
+    if kind == "battery":
+        energy = st.number_input("Charge energy budget (MWh)", min_value=0.0, value=2.0)
+        efficiency = st.number_input(
+            "Round-trip efficiency", min_value=0.01, max_value=1.0, value=0.9
+        )
+        st.caption(
+            "Idealised best case: perfect foresight of each Europe/Berlin day's signal; "
+            "at most one cycle per day, no inter-day energy transfer or chronological "
+            "state-of-charge constraint. Discharge energy = charge energy × efficiency."
+        )
+    hours = tables.shadow_prices.index
+    years = ", ".join(map(str, sorted(set(hours.tz_convert(TIMEZONE).year))))
+    st.subheader(f"Look-back: what this asset would have paid/earned in {years}")
+    st.caption(
+        "Under the modelled fee signal, not a forecast. Positive EUR = pays; negative = earns."
+    )
+    signal = tables.signal.reindex(index=hours, columns=zones.index).copy()
+    if tables.unserved_mw is not None:
+        unserved = tables.unserved_mw.reindex(hours).gt(0.001).any(axis=1)
+        signal.loc[unserved] = np.nan
+    result = asset_fees(signal[selected], kind, power, energy, efficiency)
+    summary = result.summary
+    metrics = st.columns(3)
+    for column, label, key in zip(
+        metrics,
+        ["Total fee (EUR)", "EUR per MW", "EUR per MWh moved"],
+        ["total_eur", "eur_per_mw", "eur_per_mwh_moved"],
+        strict=True,
+    ):
+        value = summary[key]
+        column.metric(label, f"{value:,.2f}" if pd.notna(value) else "N/A")
+    st.caption(
+        f"Hours paying: {summary['hours_paying']} · earning: {summary['hours_earning']} · "
+        f"neutral: {summary['hours_neutral']} · excluded (no signal / unserved): "
+        f"{summary['hours_excluded']}. MWh moved counts both charge and discharge."
+    )
+    history, geography = st.columns([3, 2])
+    with history:
+        st.subheader("Hourly asset fee (EUR)")
+        st.line_chart(result.hourly[["fee_eur"]])
+        if kind == "battery":
+            st.subheader("Hourly net injection (MW)")
+            st.line_chart(result.hourly[["injection_mw"]])
+    with geography:
+        _map(zones, zone_summary(signal), selected)
+    st.subheader("Monthly fees (EUR)")
+    monthly = result.hourly["fee_eur"].groupby(hours.strftime("%Y-%m")).sum(min_count=1)
+    st.dataframe(monthly.rename("Fee (EUR)"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results", type=Path, help="Finished run directory.")
@@ -522,13 +581,17 @@ def main() -> None:
             f"{len(missing):,} solved hours are missing fee-signal data and are not explained "
             "by the saved load shedding. Check that the fee-signal file is complete."
         )
-    signal_tab, lines_tab, unserved_tab = st.tabs(["Fee signal", "Lines", "Unserved load"])
+    signal_tab, lines_tab, unserved_tab, asset_tab = st.tabs(
+        ["Fee signal", "Lines", "Unserved load", "Site and asset"]
+    )
     with signal_tab:
         _show_signal(tables.signal, network, threshold, full_signal)
     with lines_tab:
         _show_lines(tables, network, day)
     with unserved_tab:
         _show_unserved(tables, day)
+    with asset_tab:
+        _show_asset(tables, network)
 
 
 if __name__ == "__main__":

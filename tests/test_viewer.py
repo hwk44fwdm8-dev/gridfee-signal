@@ -23,10 +23,15 @@ def test_demo_filters_and_keeps_the_repeated_hour(monkeypatch):
     app = _app(monkeypatch)
     assert not app.exception
     assert "Synthetic demo" in app.info[0].value
-    assert [m.value for m in app.metric] == ["337", "334", "3"]
+    assert [m.value for m in app.metric][:3] == ["337", "334", "3"]
     assert app.metric[1].label == "Hours with fee-signal data"
     assert not app.warning
-    assert [tab.label for tab in app.tabs] == ["Fee signal", "Lines", "Unserved load"]
+    assert [tab.label for tab in app.tabs] == [
+        "Fee signal",
+        "Lines",
+        "Unserved load",
+        "Site and asset",
+    ]
     assert [heading.value for heading in app.subheader][:2] == [
         "Daily mean fee signal",
         "Zone locations",
@@ -39,14 +44,14 @@ def test_demo_filters_and_keeps_the_repeated_hour(monkeypatch):
     app.date_input[0].set_value((day,)).run()
     assert not app.exception
     assert app.metric[0].value == "337"
-    assert [box.value for box in app.selectbox] == ["S", "W-S"]
+    assert [box.value for box in app.selectbox][:2] == ["S", "W-S"]
 
     app.date_input[0].set_value((day, day))
     app.sidebar.number_input[0].set_value(100.0)
     app.run()
     assert not app.exception
     assert app.metric[0].value == "25"
-    assert [box.value for box in app.selectbox] == ["S", "W-S"]
+    assert [box.value for box in app.selectbox][:2] == ["S", "W-S"]
     assert (app.dataframe[0].value[["Positive hours", "Negative hours"]] == 0).all().all()
     assert app.dataframe[0].value[["charge_mean", "feed_in_mean"]].isna().all().all()
     assert "Hourly line loading" in [heading.value for heading in app.tabs[1].subheader]
@@ -111,7 +116,7 @@ def test_run_with_no_signal_hours_still_shows_unserved_load(monkeypatch, tmp_pat
 
     app = _app(monkeypatch, "--results", tmp_path, "--network", network_dir)
     assert not app.exception and not app.error
-    assert [m.value for m in app.metric] == ["1", "0", "1"]
+    assert [m.value for m in app.metric][:3] == ["1", "0", "1"]
     assert any("No internal-zone fee signal" in info.value for info in app.info)
     lines, unserved = (frame.value for frame in app.dataframe)
     assert lines["Priced hours"].isna().all()
@@ -218,3 +223,20 @@ def test_incomplete_launch_arguments_or_missing_files(monkeypatch, tmp_path):
     app = _app(monkeypatch, "--results", tmp_path, "--network", EXAMPLES / "three_zone")
     assert not app.exception
     assert "fee_signal.csv or fee_signal.parquet" in app.error[0].value
+
+
+def test_site_asset_demo_and_battery(monkeypatch):
+    app = _app(monkeypatch)
+    assert not app.exception
+    assert any(
+        "Look-back:" in heading.value and "2023" in heading.value for heading in app.subheader
+    )
+    app.selectbox[2].select("S")
+    app.selectbox[3].select("battery").run()
+    assert not app.exception
+    assert any("excluded (no signal / unserved): 3" in text.value for text in app.caption)
+    assert any("Hourly net injection" in heading.value for heading in app.subheader)
+    app.date_input[0].set_value((date(2023, 10, 29), date(2023, 10, 29))).run()
+    assert not app.exception
+    assert any("perfect foresight" in text.value for text in app.caption)
+    assert app.dataframe[-1].value.index.tolist() == ["2023-10"]

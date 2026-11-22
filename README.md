@@ -229,6 +229,14 @@ when present. Timestamps must include a UTC offset (for example
 `2023-01-01T00:00:00+01:00`). It does not rerun the model, write to the run directory, or send
 your results to a hosted service. Restart it after replacing files in the run.
 
+The **Site and asset** tab is a look-back on the selected dates, not a forecast:
+what a constant load, generator or battery would have paid/earned under that
+run's modelled fee signal. Positive fees mean the asset pays; negative fees mean
+it earns (signal × net injection, feed-in positive). Missing-signal and unserved
+hours are excluded. Battery operation is an idealised daily perfect-foresight
+best case, with one charge-energy budget per day, round-trip losses, no
+inter-day energy transfer and no chronological state-of-charge constraint.
+
 ## Network config
 
 A network is a directory with two CSV files. Lines starting with `#` are comments.
