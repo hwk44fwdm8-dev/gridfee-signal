@@ -558,20 +558,20 @@ Checks against the TSOs' own publications (November 2026):
   It names the substation of the table for Staudinger 4 and 5 (Großkrotzenburg),
   Irsching 3 to 5, Zolling 5, Farge, Mehrum, Waldeck 2 (the table's Waldeck 5 and 6),
   Erzhausen, Ingolstadt 3 and 4 and Robert Frank 4 (Landesbergen): 18 plant names,
-  1,252 GWh of the 2023 current-driven redispatch. Two rows differ:
+  16 of them in the 2023 current-driven redispatch with 1,252 GWh. Two rows differ:
   - Heyden: `UW Heyden/KW`, the plant's own station, which is not in the substation
     list. The table keeps Ovenstädt (4.4 km), which the plant list names.
   - `Wilhelmshaven (ENGIE)` (229 GWh): 380 kV, `Raum Wilhelmshaven-Maade`. The plant
     list names Maade, which has 220 kV only in the substation list. The plan approval
-    of 20 December 2018 (NLStBV) is for a "380-kV-Kraftwerksanschlussleitung zum
-    geplanten Umspannwerk Fedderwarden", and TenneT's project page
-    (<https://www.tennet.eu/de/projekte/wilhelmshaven2-conneforde>) has the 380 kV
-    line Fedderwarden - Conneforde in operation since 2020. The table moved the plant
-    from Maade to Fedderwarden (5 km, same reporting zone and NUTS2 region); no TSO
+    of 20 December 2018 (NLStBV) covers a 380 kV connection line from the power plant to the substation
+    Fedderwarden, and TenneT's project page for Wilhelmshaven - Conneforde has the
+    380 kV line Fedderwarden - Conneforde in operation since 2020. The table moved
+    the plant from Maade to Fedderwarden (4 km apart, same reporting zone and NUTS2
+    region); no TSO
     publication states the plant's connection point in 2023 in so many words.
 
-  The other TenneT plants of the table (71 GWh) feed 110 kV grids and are not in the
-  register.
+  The other TenneT plants of the table (19 plant names, 71 GWh) have no existing
+  connection in the register; they are placed at the nearest substation.
 - **TransnetBW, grid schema 380/220 kV** (7 December 2020,
   <https://www.transnetbw.de/_Resources/Persistent/8/d/9/0/8d90dc90194057e956680d90f440ae825f6d9240/Netzschema_Veroeffentlichung-CWE.pdf>):
   shows a generator symbol, without the plant's name, at Daxlanden (380 kV, and
@@ -582,20 +582,20 @@ Checks against the TSOs' own publications (November 2026):
   This is agreement by position, read off by eye. The substation list has two
   stations at Mannheim (`gkm`, `gkmb`); the schema has one, and the table uses
   `gkmb`, the one mapped at the plant. TransnetBW publishes no register of
-  connection points; the other 15 plant names (185 GWh) feed 110 kV grids.
+  connection points; the other 15 plant names (185 GWh) were not checked.
 - **Amprion and 50Hertz** publish no list of the plants' connection points (looked
   for: a register after § 9 KraftNAV, the static grid models, the pages on grid
   connection). Amprion's grid overview of 31 March 2026
   (<https://www.amprion.net/Dokumente/Strommarkt/Engpassmanagement/Statisches-Netzmodell/2026/Statisches-Netzmodell-31.03.2026.pdf>)
   names the stations, not what is connected to them. The onshore plants instructed
-  by Amprion (70 plant names, 5,279 GWh) and by 50Hertz (39, 2,029 GWh) therefore
+  by Amprion (63 plant names, 5,278 GWh) and by 50Hertz (25, 2,029 GWh) therefore
   rest on the plant list alone, apart from the 50Hertz map above.
 
 Limits of the table:
 
 - Of the year's energy, 49.4 % is placed by the connection point of the plant list,
-  36.1 % by name or another source and 9.6 % at the nearest substation. Plants on the 110 kV grid of a
-  distribution system operator have no substation of their own in the list; the
+  36.1 % by name or another source and 9.6 % at the nearest substation. Plants on
+  the 110 kV grid of a distribution system operator have no substation of their own in the list; the
   nearest one is an approximation. 40 % of the year's energy lies within 5 km of its
   substation, 16 % between 5 and 10 km, 3 % further away (up to 40 km for UPM
   Schongau).
