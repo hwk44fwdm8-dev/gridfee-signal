@@ -17,8 +17,8 @@ from gridfee.injections.plants import (
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from build_plant_table import build_table  # noqa: E402
-from place_plants import place  # noqa: E402
+from build_plant_table import PLANT_LIST_POSITIONS, build_table  # noqa: E402
+from place_plants import place, with_plant_list_positions  # noqa: E402
 
 PLANTS = ROOT / "data" / "plants" / "plants_2023.csv"
 DESUB = ROOT / "data" / "networks" / "desub"
@@ -208,10 +208,12 @@ def test_plant_table_has_one_row_per_plant_and_a_position_or_missing():
     assert table["plant_id"].is_unique
     assert (table["capacity_mw"] >= 0).all()
     missing = table["location_basis"] == "missing"
-    assert table.loc[missing, ["lat", "lon"]].isna().all().all()
-    assert table.loc[~missing, ["lat", "lon"]].notna().all().all()
-    assert table.loc[~missing, "lat"].between(47.0, 56.5).all()
-    assert table.loc[~missing, "lon"].between(3.0, 15.5).all()
+    # The plant list's positions state no licence and are not in the repository.
+    unpublished = missing | (table["location_basis"] == "plant_list")
+    assert table.loc[unpublished, ["lat", "lon"]].isna().all().all()
+    assert table.loc[~unpublished, ["lat", "lon"]].notna().all().all()
+    assert table.loc[~unpublished, "lat"].between(47.0, 56.5).all()
+    assert table.loc[~unpublished, "lon"].between(3.0, 15.5).all()
     summary = pd.read_csv(PLANTS.with_name("plants_2023_summary.csv"), comment="#")
     total = summary.set_index("technology").loc["total"]
     assert total["capacity_mw"] == pytest.approx(table["capacity_mw"].sum(), abs=0.5)
@@ -250,8 +252,32 @@ def test_substation_capacity_keeps_the_totals_per_technology():
     assert placement["substation_id"].notna().all()
 
 
+def test_plant_list_positions_are_filled_in_from_the_local_file(tmp_path):
+    plants = pd.DataFrame(
+        {
+            "plant_id": ["a", "b"],
+            "location_basis": ["plant_list", "coordinates"],
+            "lat": [None, 50.0],
+            "lon": [None, 8.0],
+        }
+    )
+    with pytest.raises(SystemExit, match="not committed"):
+        with_plant_list_positions(plants, tmp_path / "none.csv")
+    path = tmp_path / "positions.csv"
+    path.write_text("# local\nplant_id,lat,lon\nc,1,2\n")
+    with pytest.raises(SystemExit, match="not of this plant table"):
+        with_plant_list_positions(plants, path)
+    path.write_text("# local\nplant_id,lat,lon\na,51.5,9.5\n")
+    filled = with_plant_list_positions(plants, path)
+    assert filled[["lat", "lon"]].to_numpy().tolist() == [[51.5, 9.5], [50.0, 8.0]]
+    assert plants["lat"].isna().iloc[0]
+
+
 def test_placement_files_are_what_the_script_builds_from_the_lists():
+    if not PLANT_LIST_POSITIONS.exists():
+        pytest.skip("needs the plant list positions of a local build_plant_table.py run")
     table, _ = repository_tables()
+    table = with_plant_list_positions(table, PLANT_LIST_POSITIONS)
     substations = pd.read_csv(DESUB / "substations.csv", comment="#")
     substations = substations[substations["kind"] == "substation"].reset_index(drop=True)
     built = capacity_by_substation(table, place(table, substations))

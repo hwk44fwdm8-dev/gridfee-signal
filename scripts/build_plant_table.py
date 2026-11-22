@@ -42,6 +42,8 @@ from gridfee.injections.zone_shares import fill_zone_from_district, in_operation
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "plants" / "plants_2023.csv"
+# Not committed (data/cache is ignored): the plant list states no licence.
+PLANT_LIST_POSITIONS = ROOT / "data" / "cache" / "plant_list_positions.csv"
 COLUMNS = {
     "EinheitMastrNummer": "plant_id",
     "Gemeindeschluessel": "ags",
@@ -215,6 +217,9 @@ def main() -> None:
     parser.add_argument("--date", default="2023-07-01", help="Units in operation on this day.")
     parser.add_argument("--min-mw", type=float, default=1.0, help="Smaller units are summed.")
     parser.add_argument("--out", type=Path, default=OUT)
+    parser.add_argument(
+        "--positions-out", type=Path, default=PLANT_LIST_POSITIONS, help="Not for committing."
+    )
     args = parser.parse_args()
     if not (args.mastr / "COMPLETE.txt").exists():
         raise SystemExit(
@@ -242,6 +247,18 @@ def main() -> None:
     table = build_table(units, position, args.min_mw, municipalities)
     table[["lat", "lon"]] = table[["lat", "lon"]].round(4)
     table["capacity_mw"] = table["capacity_mw"].round(4)
+    listed = table["location_basis"] == "plant_list"
+    args.positions_out.parent.mkdir(parents=True, exist_ok=True)
+    write(
+        args.positions_out,
+        [
+            "Positions of the plants with location_basis plant_list, from Open Power System",
+            "Data, Conventional power plants 2020-10-01, which states no licence: for local",
+            "use by scripts/place_plants.py, not for committing or passing on.",
+        ],
+        table.loc[listed, ["plant_id", "lat", "lon"]],
+    )
+    table.loc[listed, ["lat", "lon"]] = float("nan")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     write(
         args.out,
@@ -256,11 +273,13 @@ def main() -> None:
             "for lack of a municipality key. location_basis says where lat/lon come from:",
             "  coordinates   the unit's own in MaStR",
             "  plant_list    by BNetzA plant number from Open Power System Data, Conventional",
-            "                power plants 2020-10-01 (MaStR withholds the place of large units)",
+            "                power plants 2020-10-01 (MaStR withholds the place of large units).",
+            "                That list states no licence, so lat/lon are left empty here and",
+            f"                written to {args.positions_out.name} beside the build instead",
             "  municipality  median of MaStR's located units with the same municipality key",
             "  postcode      the same by postcode",
             "  district      ASSUMPTION: the same by district (Landkreis), tens of km off",
-            "  missing       none of these; no position",
+            "  missing       none of these; no position (and no lat/lon)",
             "Offshore wind has its position at sea, not where it comes ashore.",
             "Built by scripts/build_plant_table.py; see docs/DATA.md.",
         ],

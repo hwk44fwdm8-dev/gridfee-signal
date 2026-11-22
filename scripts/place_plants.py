@@ -8,6 +8,10 @@ network directory, plant_substations.csv (plant, substation, distance) and
 capacity_by_substation.csv (MW per substation and technology). A plant without a
 position goes to the substation that the located capacity of its technology in its
 zone (zone_de22, else all of Germany) mostly sits on. Method and limits: docs/DATA.md.
+
+The plants with location_basis plant_list have no position in plants_2023.csv (their
+source states no licence); theirs are read from the file scripts/build_plant_table.py
+writes beside the build (--positions), so that build has to have run on this machine.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
+from build_plant_table import PLANT_LIST_POSITIONS
 from build_zone_shares import write
 
 from gridfee.injections.plants import capacity_by_substation, nearest_substation
@@ -44,12 +49,33 @@ def place(plants: pd.DataFrame, substations: pd.DataFrame) -> pd.DataFrame:
     return placement
 
 
+def with_plant_list_positions(plants: pd.DataFrame, path: Path) -> pd.DataFrame:
+    """The plants with the positions of ``path`` filled in for those of basis plant_list."""
+    listed = plants["location_basis"] == "plant_list"
+    if not listed.any():
+        return plants
+    if not path.exists():
+        raise SystemExit(
+            f"{path} is missing: it has the positions of the {listed.sum()} plants located by "
+            "plant list, which are not committed; run scripts/build_plant_table.py first"
+        )
+    positions = pd.read_csv(path, comment="#").set_index("plant_id")
+    ids = plants.loc[listed, "plant_id"]
+    if not ids.isin(positions.index).all():
+        raise SystemExit(f"{path} is not of this plant table; run build_plant_table.py again")
+    plants = plants.copy()
+    plants.loc[listed, ["lat", "lon"]] = positions.loc[ids, ["lat", "lon"]].to_numpy()
+    return plants
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--plants", type=Path, default=PLANTS)
+    parser.add_argument("--positions", type=Path, default=PLANT_LIST_POSITIONS)
     parser.add_argument("--network", type=Path, default=DESUB, help="Has substations.csv.")
     args = parser.parse_args()
     plants = pd.read_csv(args.plants, comment="#", dtype={"ags": str})
+    plants = with_plant_list_positions(plants, args.positions)
     substations = pd.read_csv(args.network / "substations.csv", comment="#")
     substations = substations[substations["kind"] == "substation"].reset_index(drop=True)
     placement = place(plants, substations)

@@ -283,6 +283,12 @@ municipality for smaller ones, and neither for most large conventional units.
 | `district` | ASSUMPTION: the same by district (Landkreis); can be tens of km off | 13,859 |
 | `missing` | none | 0 |
 
+The plant list states no licence, so `plants_2023.csv` has no `lat`/`lon` for the
+`plant_list` plants: `build_plant_table.py` writes their positions to
+`data/cache/plant_list_positions.csv` (not committed), `place_plants.py` reads them
+from there, and the repository keeps only the substation each was placed on. Placing
+the plants again therefore needs the build to have run on the same machine.
+
 The 13.9 GW placed by district are mostly gas (7.4 GW), hard coal (2.5 GW) and lignite
 (2.2 GW) units that the 2020 plant list does not have under their plant number.
 
