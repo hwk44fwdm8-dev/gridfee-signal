@@ -262,6 +262,43 @@ def test_asset_pattern_counts_days_once_across_repeated_hour():
     assert viewer._asset_pattern(frame.iloc[:0])["mean_signal"].isna().all()
 
 
+def test_asset_map_selection_is_independent(monkeypatch):
+    tables, network = viewer._demo()
+    state = {
+        "zone_choice": "N",
+        "asset_site": "N",
+        "asset_map": {"selection": {"zone_pick": [{"zone_id": "S"}]}},
+    }
+    monkeypatch.setattr(viewer.st, "session_state", state)
+    monkeypatch.setattr(viewer.st, "caption", lambda *args, **kwargs: None)
+
+    def chart(*args, **kwargs):
+        assert kwargs["key"] == "asset_map"
+        kwargs["on_select"]()
+
+    monkeypatch.setattr(viewer.st, "altair_chart", chart)
+    viewer._map(
+        network.zones_frame(),
+        viewer.zone_summary(tables.signal),
+        "N",
+        None,
+        key="asset_map",
+        choice_key="asset_site",
+    )
+    assert state["asset_site"] == "S"
+    assert state["zone_choice"] == "N"
+    state["asset_map"]["selection"]["zone_pick"] = []
+    viewer._map(
+        network.zones_frame(),
+        viewer.zone_summary(tables.signal),
+        "S",
+        None,
+        key="asset_map",
+        choice_key="asset_site",
+    )
+    assert state["asset_site"] == "S"
+
+
 def test_asset_cache_reuses_results_and_invalidates_inputs(monkeypatch):
     from unittest.mock import Mock
 
