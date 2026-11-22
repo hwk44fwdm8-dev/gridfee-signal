@@ -48,6 +48,21 @@ derived from the Marktstammdatenregister (© Bundesnetzagentur,
 full export of 1 October 2026. The data was aggregated to zones; no unit data is
 included in this repository.
 
+## `data/population/`
+
+`population_1km.csv.gz` is derived from: Statistisches Bundesamt (Destatis), Zensus 2022,
+Bevölkerungszahl im 1-km-Gitter, licensed under the
+[Datenlizenz Deutschland – Namensnennung – Version 2.0](https://www.govdata.de/dl-de/by-2-0).
+Changes: cell centres converted to WGS 84 and a NUTS2 region added per cell, using
+NUTS 2021 boundaries from Eurostat GISCO (© EuroGeographics for the administrative
+boundaries; no boundary data is included). `nuts2_check.csv` also quotes Eurostat's
+table `demo_r_d2jan` (© European Union; Eurostat data may be reused with the source
+named).
+
+`data/networks/desub/load_shares.csv` is derived from `population_1km.csv.gz` (as above)
+and from the substation positions of `data/networks/desub/substations.csv`, which are
+OpenStreetMap's (© OpenStreetMap contributors, ODbL 1.0).
+
 ## `data/costs/`
 
 `generation_costs_2023.csv` holds 14 values (efficiencies, CO2 intensities, variable
