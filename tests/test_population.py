@@ -12,6 +12,7 @@ from gridfee.injections.population import (
     PopulationGridError,
     compare_with_regions,
     load_population_grid,
+    place_on_substations,
     read_census_grid,
     scale_to_regions,
 )
@@ -128,3 +129,56 @@ def test_shipped_grid_puts_the_city_states_in_their_own_region():
 
     assert set(berlin["nuts2"]) == {"DE30"} and len(berlin) > 30
     assert set(hamburg["nuts2"]) == {"DE60"} and len(hamburg) > 30
+
+
+SUBSTATIONS = pd.DataFrame(
+    {
+        "substation_id": ["west", "east", "east-2", "berlin", "far"],
+        "nuts2": ["DE11", "DE11", "DE11", "DE30", "DE30"],
+        "lat": [48.7, 48.8, 48.8, 52.5, 53.5],
+        "lon": [9.0, 9.1, 9.1, 13.4, 14.0],
+    }
+)
+
+
+def test_place_on_substations_gives_each_cell_to_the_nearest_in_its_region() -> None:
+    totals = pd.Series({"DE11": 200.0, "DE30": 300.0})
+    placed = place_on_substations(GRID, SUBSTATIONS, totals).set_index("substation_id")
+
+    # DE11 is scaled from 100 to 200; the two substations at one position share a cell.
+    assert placed["population"].to_dict() == pytest.approx(
+        {"west": 60.0, "east": 70.0, "east-2": 70.0, "berlin": 300.0, "far": 0.0}
+    )
+    assert placed.groupby("nuts2")["population"].sum().to_dict() == pytest.approx(totals.to_dict())
+    assert placed["load_share"].sum() == pytest.approx(1.0)
+    assert placed.loc["berlin", "load_share"] == pytest.approx(0.6)
+
+
+def test_place_on_substations_keeps_a_cell_in_its_own_region() -> None:
+    # The DE30 substation is nearer to the DE11 cells than "west" is, and gets none.
+    near = SUBSTATIONS.iloc[[0, 3]].assign(lat=[40.0, 48.75], lon=[9.0, 9.05])
+    placed = place_on_substations(GRID, near, pd.Series({"DE11": 100.0, "DE30": 200.0}))
+
+    assert placed["population"].tolist() == pytest.approx([100.0, 200.0])
+
+
+def test_place_on_substations_needs_a_substation_in_every_region() -> None:
+    with pytest.raises(PopulationGridError, match="no substation.*DE30"):
+        place_on_substations(GRID, SUBSTATIONS.iloc[:3], pd.Series({"DE11": 1.0, "DE30": 1.0}))
+
+
+def test_shipped_load_shares_keep_the_eurostat_population_per_region() -> None:
+    desub = ROOT / "data" / "networks" / "desub"
+    listed = pd.read_csv(desub / "substations.csv", comment="#")
+    shares = pd.read_csv(desub / "load_shares.csv", comment="#")
+    substations = listed[listed["kind"] == "substation"]
+
+    assert shares["substation_id"].tolist() == substations["substation_id"].tolist()
+    assert shares["nuts2"].tolist() == substations["nuts2"].tolist()
+    assert shares["load_share"].sum() == pytest.approx(1.0, abs=1e-6)
+    per_region = shares.groupby("nuts2")["population"].sum()
+    assert (per_region - eurostat_2023()).abs().max() < 1.0
+    rebuilt = place_on_substations(
+        load_population_grid(POPULATION / "population_1km.csv.gz"), substations, eurostat_2023()
+    )
+    assert shares["load_share"].to_numpy() == pytest.approx(rebuilt["load_share"], abs=1e-8)
