@@ -98,7 +98,7 @@ def plot_results(
         figures["map_mean_signal"] = _map_mean_signal(zone_table, zones, lines, regions)
         figures["map_lines"] = _map_lines(tables, line_table, zones, lines, regions)
     figures["timeseries_signal"] = _timeseries_signal(signal, zones, threshold)
-    figures["timeseries_lines"] = _timeseries_lines(tables, threshold)
+    figures["timeseries_lines"] = _timeseries_lines(tables, zones, lines, threshold)
     figures["timeseries_unserved"] = _timeseries_unserved(tables)
 
     paths = []
@@ -330,7 +330,17 @@ def _labels(zone_ids, zones: pd.DataFrame) -> list[str]:
     return [f"{zones.at[z, 'name']} ({z})" if zones.at[z, "name"] != z else z for z in zone_ids]
 
 
-def _timeseries_lines(tables: ResultTables, threshold: float):
+def _line_label(line_id: str, zones: pd.DataFrame, lines: pd.DataFrame) -> str:
+    """The two ends of a line by name, unless its id already names them."""
+    if line_id not in lines.index:
+        return line_id
+    ends = [lines.at[line_id, "from_zone"], lines.at[line_id, "to_zone"]]
+    if line_id == "-".join(ends):
+        return line_id
+    return " - ".join(str(zones.at[end, "name"] or end) for end in ends)
+
+
+def _timeseries_lines(tables: ResultTables, zones, lines, threshold: float):
     daily = daily_line_hours(tables, threshold)
     if daily.empty or not len(daily.columns):
         return None
@@ -350,7 +360,9 @@ def _timeseries_lines(tables: ResultTables, threshold: float):
         norm=Normalize(0, 24),
     )
     ax.set_facecolor("#f4f4f4")
-    labels = [f"{line} ({hours:,} h)" for line, hours in daily.sum().items()]
+    labels = [
+        f"{_line_label(line, zones, lines)} ({hours:,} h)" for line, hours in daily.sum().items()
+    ]
     ax.set_yticks(np.arange(len(daily.columns)) + 0.5, labels, fontsize=8)
     ax.invert_yaxis()
     ax.set_title(title, fontsize=11, loc="left")

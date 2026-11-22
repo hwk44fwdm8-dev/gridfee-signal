@@ -207,3 +207,13 @@ def test_plot_results_on_a_network_with_many_zones(tmp_path):
         ResultTables(signal, shadow, flows), load_network(directory), tmp_path / "plots"
     )
     assert {path.name for path in paths} >= {"timeseries_signal.png", "timeseries_lines.png"}
+
+
+def test_line_label_names_the_two_ends(network_dir):
+    from gridfee.plots.figures import _line_label
+
+    network = load_network(network_dir)
+    zones, lines = network.zones_frame(), network.lines_frame()
+    assert _line_label("A-B", zones, lines) == "A-B"
+    coded = lines.rename(index={"A-B": "11T0-0000-0001-X"})
+    assert _line_label("11T0-0000-0001-X", zones, coded) == "North - South"
