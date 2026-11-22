@@ -85,6 +85,17 @@ https://doi.org/10.25832/conventional_power_plants/2020-10-01 (primary data: BNe
 Kraftwerksliste, Umweltbundesamt, and efficiencies researched by OPSD). The data package
 asks for this attribution and states no licence.
 
+## `data/plants/` and `data/networks/desub/` plant files
+
+`plants_2023.csv`, `plant_substations.csv` and `capacity_by_substation.csv` are derived
+from the Marktstammdatenregister (© Bundesnetzagentur, Datenlizenz Deutschland –
+Namensnennung – Version 2.0), full export of 1 October 2026. The positions with
+`location_basis` `plant_list` in `plants_2023.csv` are from: Open Power System Data. 2020.
+Data Package Conventional power plants. Version 2020-10-01.
+https://doi.org/10.25832/conventional_power_plants/2020-10-01 (primary data: BNetzA
+Kraftwerksliste, Umweltbundesamt, and research by OPSD). The data package asks for this
+attribution and states no licence.
+
 ## `data/weather/` (also `data/weather/de38/`)
 
 `capacity_factors_2023.csv` was generated using Copernicus Climate Change Service
