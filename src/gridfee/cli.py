@@ -294,24 +294,23 @@ def redispatch(
         help="CSV export of netztransparenz.de's redispatch page that covers the backcast "
         "(docs/DATA.md).",
     ),
-    network_dir: Path = typer.Option(DE22, "--network", help="Directory with zones.csv."),
+    network_dir: Path = typer.Option(
+        DE22, "--network", help="Directory with zones.csv and lines.csv."
+    ),
     out: Path | None = typer.Option(None, help="Report file (default: redispatch.md in results)."),
 ) -> None:
     """Compare the fee signal of a backcast with the redispatch the TSOs published."""
     out = out or results / "redispatch.md"
     try:
-        tso_of_zone = {
-            zone.zone_id: zone.tso_zone
-            for zone in load_zones(network_dir / "zones.csv")
-            if zone.tso_zone
-        }
-        signal = _read_berlin_hours(results / "fee_signal.csv")
-        classes = _read_berlin_hours(results / "fee_signal_class.csv")
+        network = load_network(network_dir)
+        signal = _read_signal_table(results, "fee_signal")
+        classes = _read_signal_table(results, "fee_signal_class")
         comparison = compare_with_redispatch(
             signal.where(classes != NEUTRAL, 0.0),
             _read_berlin_hours(results / "shadow_prices.csv"),
-            tso_of_zone,
+            network.zone_to_tso,
             hourly_redispatch(read_redispatch(measures)),
+            {line.line_id: (line.from_zone, line.to_zone) for line in network.lines},
         )
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(
@@ -671,6 +670,19 @@ def _finish_validation(checks: pd.DataFrame, report: Path) -> None:
             err=True,
         )
         raise typer.Exit(code=1)
+
+
+def _read_signal_table(results: Path, name: str) -> pd.DataFrame:
+    """Read a table of `write_signal`: the newer of its CSV and its Parquet file."""
+    paths = [p for p in (results / f"{name}.csv", results / f"{name}.parquet") if p.exists()]
+    if not paths:
+        raise FileNotFoundError(f"no {name}.csv or {name}.parquet in {results}")
+    path = max(paths, key=lambda p: p.stat().st_mtime)
+    if path.suffix == ".csv":
+        return _read_berlin_hours(path)
+    frame = pd.read_parquet(path)
+    frame.index = pd.to_datetime(frame.index, utc=True).tz_convert(smard.TIMEZONE)
+    return frame
 
 
 def _read_berlin_hours(path: Path) -> pd.DataFrame:

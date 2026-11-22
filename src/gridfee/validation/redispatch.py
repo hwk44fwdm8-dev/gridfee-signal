@@ -37,6 +37,13 @@ _COLUMNS = {
 # netztransparenz.de writes "TenneT DE", zones.csv "TenneT".
 _TSO_NAMES = {"TenneT DE": "TenneT"}
 _PRICE_TOLERANCE = 1e-6
+_LINE_COLUMNS = ["hours", "hours_with_redispatch", "mean_redispatch_mwh"]
+_DIRECTION_COLUMNS = [
+    "mean_signal",
+    "mean_net_redispatch_mwh",
+    "hours_compared",
+    "hours_same_direction",
+]
 
 
 def _instants(date: pd.Series, time: pd.Series, zone: pd.Series, path: Path) -> pd.Series:
@@ -127,15 +134,22 @@ def compare_with_redispatch(
     shadow_prices: pd.DataFrame,
     tso_of_zone: Mapping[str, str],
     redispatch: pd.DataFrame,
+    line_zones: Mapping[str, tuple[str, str]],
 ) -> RedispatchComparison:
     """Compare the fee signal (hours x zones) with hourly redispatch per TSO.
 
-    ``shadow_prices`` (hours x lines named ``FROM-TO``) tells which line between two
-    zones of ``tso_of_zone`` is priced in an hour. All indexes are timezone-aware.
-    Neutral signals are expected as 0, the others as their value.
+    ``shadow_prices`` (hours x lines) tells which line is priced in an hour; the
+    lines of ``line_zones`` (line id to its two zones) that join two zones of
+    ``tso_of_zone`` are reported. All indexes are timezone-aware. Neutral signals
+    are expected as 0, the others as their value. Hours between the first and the
+    last hour of ``redispatch`` that it does not list had no redispatch.
     """
     index = signal.index.tz_convert("UTC")
-    if not index.isin(redispatch.index).any():
+    if (
+        redispatch.empty
+        or index.max() < redispatch.index.min()
+        or index.min() > redispatch.index.max()
+    ):
         raise ValidationError("the redispatch data covers none of the fee signal's hours")
     signal = signal.set_axis(index)
     redispatch = redispatch.reindex(index, fill_value=0.0)
@@ -172,7 +186,9 @@ def compare_with_redispatch(
 
     prices = shadow_prices.set_axis(shadow_prices.index.tz_convert("UTC")).reindex(index)
     internal = [
-        line for line in prices.columns if all(end in tso_of_zone for end in line.split("-", 1))
+        line
+        for line in prices.columns
+        if line in line_zones and all(zone in tso_of_zone for zone in line_zones[line])
     ]
     line_rows, direction_rows = [], []
     masks = {"all signal hours": active} | {
@@ -199,8 +215,10 @@ def compare_with_redispatch(
     return RedispatchComparison(
         hours.rename_axis("hours_of"),
         deciles,
-        pd.DataFrame(line_rows).set_index("line").drop(columns="redispatch_twh"),
-        pd.DataFrame(direction_rows).set_index(["line", "tso_zone"]),
+        pd.DataFrame(line_rows, columns=["line", *_LINE_COLUMNS]).set_index("line"),
+        pd.DataFrame(direction_rows, columns=["line", "tso_zone", *_DIRECTION_COLUMNS]).set_index(
+            ["line", "tso_zone"]
+        ),
     )
 
 
