@@ -250,7 +250,58 @@ python scripts/build_substation_load.py
 distribution grid in between is not looked at. Positions are those of the list, with
 its caveats (name matches not checked one by one, some placed at the mean of their
 neighbours). Regions with one substation put their whole load there (Hamburg: 2.2 % of
-Germany on `hamburg-sued`). Industry is not distinguished from households.
+Germany on `hamburg-sued`). Industry is not distinguished from households; the next
+section does that.
+
+## Demand per substation and sector
+
+`data/networks/desub/sector_demand.csv` gives every substation its annual electricity
+use in MWh for `households`, commerce/trade/services (`cts`) and `industry`, and
+industry again split by the working hours of its branches (`industry_s1_wt_sa` ...
+`industry_s3_wt_sa_so`). `gridfee backcast --sector-demand` uses it in place of the
+population share (after `scripts/build_desub_shares.py` has put it on the buses).
+Rebuild it with (needs the `derive` extra; downloads about 300 MB):
+
+```bash
+python scripts/build_sector_demand.py
+```
+
+| Step | Source | Result |
+| --- | --- | --- |
+| Use per municipality and sector | DemandRegio, table 70 (FfE open data API), from district totals of 2017 | households 129.5, cts 153.1, industry 240.5 TWh |
+| Industry: grid draw and branches | DemandRegio, table 25: use, grid draw and own generation per district and 29 branches (WZ 2008), 2017 | industry 183.7 TWh from the grid (56.8 TWh generated on site) |
+| Place inside a municipality | 1 km population cells, municipal boundaries (BKG VG250 of 2019, 2015, 2010) | MWh per cell |
+| Cell to substation | nearest substation of the cell's NUTS2 region, as for `load_shares.csv` | MWh per substation |
+
+- **Hourly shape.** Households and cts follow the standard load profiles H0 and G0
+  (`data/demand/profile_tables.csv`: season, day type, local hour; H0 with its seasonal
+  factor). Industry follows the working hours of its branch, as in DemandRegio's
+  disaggregator: one shift (08:00 to 16:30), two (06:00 to 23:00) or three, on
+  workdays only, with Saturdays or all week; outside them a plant draws 40 % of its
+  load. Chemicals, metals, paper and glass run all week (98.5 of 183.7 TWh). Public
+  holidays are the nine that all states share.
+- **The total stays SMARD's.** In every hour the substations of a TSO area share that
+  area's observed load in proportion to `annual use x profile`, summed over their
+  sectors. The annual figures of 2017 only set the proportions, so any year can be run.
+- **Check against 2023.** Summed per TSO area, the profiles alone correlate with the
+  observed hourly load at 0.80 (50Hertz), 0.91 (Amprion), 0.88 (TenneT) and 0.86
+  (TransnetBW). Peak over mean load per substation ranges from 1.26 to 1.90; with the
+  population split it is the TSO area's for every substation.
+
+**ASSUMPTIONS and limits.**
+
+- The municipal table's metadata calls sector 2 commerce and 3 industry. Sector 2 equals
+  the industry table district by district, so it is read as industry here.
+- Inside a municipality every sector follows population; a plant at the edge of a town
+  sits where the town's people live. Known industrial sites are not used yet.
+- The spatial pattern and the branch mix are those of 2017. Nothing in it is measured
+  per substation, and no measured regional demand of 2023 or later was found.
+- SMARD's load is taken to exclude what industry generates for itself, which is why
+  industry enters at its grid draw; this was not checked against SMARD's definition.
+- The profiles carry calendar and season only: no weather, no rooftop solar behind the
+  meter, one curve per sector or shift class for all of Germany.
+- Commerce is one profile (G0) for all branches; DemandRegio's table per commerce branch
+  (table 64) is not used.
 
 ## Plants and their substations
 

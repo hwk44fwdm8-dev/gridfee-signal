@@ -63,6 +63,25 @@ named).
 and from the substation positions of `data/networks/desub/substations.csv`, which are
 OpenStreetMap's (© OpenStreetMap contributors, ODbL 1.0).
 
+## `data/networks/desub/sector_demand.csv` and `data/demand/` (CC BY-NC 4.0 in part)
+
+`sector_demand.csv` is derived from two DemandRegio tables served by FfE's open data API
+(https://opendata.ffe.de): "Stromverbrauch je Sektor und Gemeinde" (© FfE 2020,
+CC BY 4.0) and "Stromverbrauch (Verbrauch, Netzbezug, Eigenerzeugung) in der Industrie
+je LK und WZ" (© FfE 2019, © Statistisches Bundesamt (Destatis), 2008-2017, © Statistik
+der Bundesagentur für Arbeit, **CC BY-NC 4.0**). Because of the second table
+**`sector_demand.csv` may not be used commercially**; it is the only file in this
+repository with that restriction. Changes: industry reduced to its grid draw, split by
+shift class, spread over population cells and summed per substation. It also uses
+`population_1km.csv.gz`, the substation positions (both as above) and municipal
+boundaries VG250 (© GeoBasis-DE / BKG, dl-de/by-2-0; no boundary data is included).
+
+`data/demand/profile_tables.csv` is derived from the DemandRegio load curves "Lastgang
+(SLP H0)" and "Lastgang (SLP G0)" (© FfE, CC BY 4.0): averaged per season, day type and
+hour. The shift class per industry branch in `src/gridfee/injections/demand.py` is taken
+from the DemandRegio disaggregator (https://github.com/DemandRegioTeam/disaggregator,
+GPL-3.0); its code is not used.
+
 ## `data/costs/`
 
 `generation_costs_2023.csv` holds 14 values (efficiencies, CO2 intensities, variable

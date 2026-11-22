@@ -126,6 +126,7 @@ def build_historical_injections(
     capacity_shares: pd.DataFrame | None = None,
     balance_tolerance: float = 1e-6,
     capacity_factors: Mapping[str, pd.DataFrame] | None = None,
+    demand_factors: pd.DataFrame | None = None,
 ) -> ZonalInjections:
     """Split TSO-zone series (hours x TSO zones, MW) over the zones.
 
@@ -138,6 +139,9 @@ def build_historical_injections(
     capacity share times its factor, divided by the sum over the TSO zone; in hours
     where that sum is 0 the capacity shares alone are used. The factors must cover
     every hour and every zone that has a share above 0.
+
+    ``demand_factors`` does the same for load: hourly factors per zone (hours x zones),
+    as built by :func:`gridfee.injections.demand.sector_demand_split`.
     """
     for technology, frame in tso_res_mw.items():
         if not frame.index.equals(tso_load_mw.index):
@@ -164,7 +168,8 @@ def build_historical_injections(
             raise ValueError(f"{quantity}: TSO-zone series contain missing values")
         shares = resolve_shares(zones, quantity, list(tso_mw.columns), given)
         share_frames.append(shares)
-        weights = _hourly_weights(quantity, shares, capacity_factors.get(quantity), tso_mw.index)
+        factors = demand_factors if quantity == DEMAND else capacity_factors.get(quantity)
+        weights = _hourly_weights(quantity, shares, factors, tso_mw.index)
         zonal = pd.DataFrame(0.0, index=tso_mw.index, columns=zone_ids)
         for row in shares.itertuples():
             zonal[row.zone_id] = tso_mw[row.tso_zone] * weights[row.zone_id]

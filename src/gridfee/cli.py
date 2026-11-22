@@ -25,6 +25,11 @@ from gridfee.backcast import (
 from gridfee.data import smard
 from gridfee.flows import OPFError, OPFResult, run_dc_opf
 from gridfee.injections import build_historical_injections, check_energy_balance, read_shares
+from gridfee.injections.demand import (
+    load_profile_tables,
+    read_sector_demand,
+    sector_demand_split,
+)
 from gridfee.injections.weather import read_capacity_factors
 from gridfee.network import NetworkConfigError, ZoneNetwork, load_network, load_zones
 from gridfee.signal import (
@@ -162,6 +167,15 @@ def injections(
     population_shares: Path | None = typer.Option(
         None, help="CSV zone_id,share (share of the TSO zone's load). Default: placeholders."
     ),
+    sector_demand: Path | None = typer.Option(
+        None,
+        help="CSV zone_id,households,cts,industry[,industry_<shift class>]: annual MWh. Replaces "
+        "--population-shares and gives every zone the hourly shape of its sectors.",
+    ),
+    demand_profiles: Path = typer.Option(
+        Path("data/demand/profile_tables.csv"),
+        help="Hourly profiles of households and commerce, used with --sector-demand.",
+    ),
     capacity_shares: Path | None = typer.Option(
         None, help="CSV technology,zone_id,share. Default: placeholders."
     ),
@@ -180,15 +194,19 @@ def injections(
         tso_res = {
             tech: smard.read_table(data, f"{tech}_tso", year) for tech in smard.TSO_RES_FILTERS
         }
+        demand_shares, demand_factors = _demand_split(
+            zone_list, tso_load, population_shares, sector_demand, demand_profiles
+        )
         result = build_historical_injections(
             zone_list,
             tso_load,
             tso_res,
-            None if population_shares is None else read_shares(population_shares),
+            demand_shares,
             None if capacity_shares is None else read_shares(capacity_shares, "technology"),
             capacity_factors=None
             if capacity_factors is None
             else read_capacity_factors(capacity_factors),
+            demand_factors=demand_factors,
         )
         balance = check_energy_balance(zone_list, result, tso_load, tso_res)
     except (NetworkConfigError, smard.SmardError, OSError, ValueError) as err:
@@ -381,6 +399,15 @@ def backcast(
     population_shares: Path | None = typer.Option(
         None, help="CSV zone_id,share (share of the TSO zone's load). Default: placeholders."
     ),
+    sector_demand: Path | None = typer.Option(
+        None,
+        help="CSV zone_id,households,cts,industry[,industry_<shift class>]: annual MWh. Replaces "
+        "--population-shares and gives every zone the hourly shape of its sectors.",
+    ),
+    demand_profiles: Path = typer.Option(
+        Path("data/demand/profile_tables.csv"),
+        help="Hourly profiles of households and commerce, used with --sector-demand.",
+    ),
     capacity_shares: Path | None = typer.Option(
         None, help="CSV technology,zone_id,share. Default: placeholders."
     ),
@@ -481,15 +508,19 @@ def backcast(
         tso_res = {
             tech: smard.read_table(data, f"{tech}_tso", year) for tech in smard.TSO_RES_FILTERS
         }
+        demand_shares, demand_factors = _demand_split(
+            internal, tso_load, population_shares, sector_demand, demand_profiles
+        )
         zonal = build_historical_injections(
             internal,
             tso_load,
             tso_res,
-            None if population_shares is None else read_shares(population_shares),
+            demand_shares,
             None if capacity_shares is None else read_shares(capacity_shares, "technology"),
             capacity_factors=None
             if capacity_factors is None
             else read_capacity_factors(capacity_factors),
+            demand_factors=demand_factors,
         )
         if plant_efficiency is not None and generation_costs is None:
             raise BackcastError("--plant-efficiency needs --generation-costs")
@@ -583,6 +614,14 @@ def backcast(
                 f"with the capacity factors in {capacity_factors.name}, built from weather data "
                 "with a generic power curve (an ASSUMPTION, docs/DATA.md)."
             )
+        if sector_demand is not None:
+            notes.append(
+                "Load is split over the zones of each TSO zone hour by hour by the annual use "
+                f"of households, commerce and industry at each zone ({sector_demand.name}, "
+                "from DemandRegio) and an hourly profile per sector: standard load profiles "
+                "for households and commerce, working hours by branch for industry. Inside "
+                "a municipality use follows population (ASSUMPTION, docs/DATA.md)."
+            )
         if generation_shares is not None:
             notes.append(
                 "Generation other than wind and solar is modelled per fuel and placed by each "
@@ -675,6 +714,24 @@ def backcast(
     for note in notes[1:]:
         typer.secho(note, fg=typer.colors.YELLOW, err=True)
     _finish_validation(*report)
+
+
+def _demand_split(
+    zones: list,
+    tso_load: pd.DataFrame,
+    population_shares: Path | None,
+    sector_demand: Path | None,
+    demand_profiles: Path,
+) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
+    """Demand shares and hourly factors: by sector if given, else by population."""
+    if sector_demand is None:
+        return (None if population_shares is None else read_shares(population_shares)), None
+    if population_shares is not None:
+        raise ValueError("give --sector-demand or --population-shares, not both")
+    tso_of = {z.zone_id: z.tso_zone for z in zones if z.tso_zone is not None}
+    return sector_demand_split(
+        tso_of, tso_load, read_sector_demand(sector_demand), load_profile_tables(demand_profiles)
+    )
 
 
 def _write_opf(result: OPFResult, out: Path) -> None:

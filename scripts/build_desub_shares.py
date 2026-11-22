@@ -3,9 +3,9 @@
     python scripts/build_desub_shares.py --network NETWORK_DIR --out OUT_DIR
 
 Reads the buses (zones.csv written by scripts/derive_desub_network.py), the load
-share and the capacity per substation (load_shares.csv and
-capacity_by_substation.csv in data/networks/desub) and, per region, the efficiency
-classes and weather factors of the 38-region network (data/shares/de38,
+share, the annual use per sector and the capacity per substation (load_shares.csv,
+sector_demand.csv and capacity_by_substation.csv in data/networks/desub) and, per
+region, the efficiency classes and weather factors of the 38-region network (data/shares/de38,
 data/weather/de38), and writes the share, weather and reporting files of
 `gridfee backcast` with one row or column per bus.
 
@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from gridfee.injections.demand import INDUSTRY_COLUMNS, SECTORS
 from gridfee.injections.weather import read_capacity_factors, write_capacity_factors
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +41,7 @@ def main() -> None:
     parser.add_argument("--network", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--load-shares", type=Path, default=DESUB / "load_shares.csv")
+    parser.add_argument("--sector-demand", type=Path, default=DESUB / "sector_demand.csv")
     parser.add_argument("--capacity", type=Path, default=DESUB / "capacity_by_substation.csv")
     parser.add_argument("--region-shares", type=Path, default=DE38)
     parser.add_argument(
@@ -75,6 +77,15 @@ def main() -> None:
     of_tso.round(9).rename("share").rename_axis("zone_id").to_csv(
         args.out / "population_shares.csv"
     )
+
+    # Annual use per sector, on the substation's bus (gridfee backcast --sector-demand).
+    sectors = pd.read_csv(args.sector_demand, comment="#")
+    unknown = sorted(set(sectors["substation_id"]) - set(bus_of.index))
+    if unknown:
+        raise SystemExit(f"sector demand for substations without a connected bus: {unknown}")
+    sectors["zone_id"] = sectors["substation_id"].map(bus_of)
+    columns = [c for c in sectors.columns if c in SECTORS or c in INDUSTRY_COLUMNS]
+    sectors.groupby("zone_id")[columns].sum().to_csv(args.out / "sector_demand.csv")
 
     # Plants: MW per substation and technology, on the substation's bus.
     capacity = pd.read_csv(args.capacity, comment="#")
