@@ -146,6 +146,15 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=16)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
+    # Finished files are kept so that a broken-off run can go on, but only for one export.
+    marker = args.out / "SOURCE.txt"
+    earlier = marker.read_text(encoding="utf-8").strip() if marker.exists() else None
+    if earlier != args.source and (earlier is not None or any(args.out.glob("*.csv"))):
+        raise SystemExit(
+            f"{args.out} holds files of another export ({earlier or 'unknown'}); "
+            "use an empty directory"
+        )
+    marker.write_text(f"{args.source}\n", encoding="utf-8")
     with open_export(args.source) as export:
         names = sorted(
             (name for name in export.namelist() if MEMBERS.match(name)),
@@ -153,7 +162,6 @@ def main() -> None:
         )
     with ThreadPoolExecutor(args.workers) as pool:
         list(pool.map(lambda name: extract_member(args.source, name, args.out), names))
-    (args.out / "SOURCE.txt").write_text(f"{args.source}\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
