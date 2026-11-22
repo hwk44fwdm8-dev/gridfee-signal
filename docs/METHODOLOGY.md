@@ -126,3 +126,37 @@ Czechia: observed +5.1 TWh from 50Hertz and -6.2 TWh into TenneT, modelled -6.4 
 +5.4 TWh.
 
 Not done: the directional check against BNetzA redispatch data (a stretch goal).
+
+### Result for 2023 with hourly wind and solar per zone from weather
+
+Run on 22 November 2026 as the last column above, plus `--capacity-factors
+data/weather/capacity_factors_2023.csv` ([DATA.md](DATA.md#hourly-capacity-factors-from-era5)):
+onshore wind and solar of each TSO zone are split over its zones hour by hour by
+capacity times the zone's weather, instead of by capacity alone. 8,756 hours solved,
+validation 13 of 13, load unserved in 46 hours (24.5 GWh).
+
+**The signal barely changes: 34 hours are not neutral (30 before), and a line between
+German zones has a price in the same 5 hours.**
+
+The reason is not that the lines are never full. "Congested" in the tables above
+means that a line has a shadow price. Counting instead the hours in which the flow
+sits at the line's capacity:
+
+| | Placeholder shares | Shares from public data | Plus weather |
+| --- | --- | --- | --- |
+| Hours with a line between German zones at its capacity | 1,430 | 1,098 | 1,204 |
+| ... of which the line has a shadow price | 0 | 5 | 5 |
+| Sachsen-Anhalt–Niedersachsen-Süd (DE05-DE09) at capacity | 383 | 946 | 1,035 |
+| Rheinland-Pfalz–BW-Karlsruhe (DE17-DE20) at capacity | 58 | 106 | 117 |
+| Hessen–BW-Karlsruhe (DE16-DE20) at capacity | 11 | 57 | 63 |
+
+A line at its capacity has no price when the power can be produced on its other side
+at the same cost. In this backcast all generation other than wind and solar has one
+cost and enough capacity in every zone, so moving it across a full line is free, and
+the fee signal, which is built from shadow prices, stays neutral. The same makes the
+solver indifferent between many dispatches, so a flow at capacity in a single hour
+is not proof that the line was needed. **What keeps the signal neutral is therefore
+the single cost of other generation, not the zone shares or the weather.** A signal
+needs costs that differ between plants or zones (fuel-specific costs, or observed
+output of single plants), which is dispatch modelling and not part of this step.
+

@@ -30,3 +30,14 @@ derived from the Marktstammdatenregister (© Bundesnetzagentur,
 [Datenlizenz Deutschland – Namensnennung – Version 2.0](https://www.govdata.de/dl-de/by-2-0)),
 full export of 1 October 2026. The data was aggregated to zones; no unit data is
 included in this repository.
+
+## `data/weather/`
+
+`capacity_factors_2023.csv` was generated using Copernicus Climate Change Service
+information (2026): ERA5 hourly data on single levels, Hersbach et al.,
+[doi:10.24381/cds.adbb2d47](https://doi.org/10.24381/cds.adbb2d47), licensed under
+CC-BY 4.0, read from the ARCO-ERA5 copy on Google Cloud. Neither the European
+Commission nor ECMWF is responsible for any use made of it. The data was converted
+to capacity factors and averaged over zones; no ERA5 fields are included in this
+repository.
+

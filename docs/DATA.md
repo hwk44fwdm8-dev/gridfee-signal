@@ -168,3 +168,48 @@ a URL, which takes about 15 minutes.
 **Limits.** Capacity shares place feed-in in proportion to installed capacity, so wind
 is assumed to blow equally within a TSO zone. Population places demand without regard
 to industry. Each zone still belongs to one TSO zone only (see above).
+
+## Hourly capacity factors from ERA5
+
+With capacity shares alone every zone of a TSO zone has the TSO zone's hourly shape:
+when TenneT's wind is at half its capacity, the model has it at half in
+Schleswig-Holstein and in Bayern. `--capacity-factors` (on `gridfee injections` and
+`gridfee backcast`) takes a file of hourly factors per zone. A zone's part of its TSO
+zone's observed feed-in in an hour is then
+
+    capacity share x factor / sum over the zones of the TSO zone (capacity share x factor)
+
+so the TSO-zone series from SMARD is still met exactly in every hour, and only the
+differences between the zones of one TSO zone matter, not the level of the factors.
+In hours in which that sum is 0 (for example SMARD reports solar feed-in while the
+weather data has none) the capacity shares alone are used.
+
+`data/weather/capacity_factors_2023.csv` holds factors for onshore wind and solar,
+built with
+
+    pip install -e ".[weather]"
+    python scripts/build_capacity_factors.py --year 2023 --nuts <NUTS level 2 geojson>
+
+- **Source:** ERA5, the reanalysis of the Copernicus Climate Change Service (hourly,
+  0.25 degree grid, licence CC-BY 4.0): 100 m wind and surface solar radiation
+  downwards. It is read from Google's public copy of ERA5 (ARCO-ERA5,
+  `gs://gcp-public-data-arco-era5`), which needs no account. Copernicus's own Climate
+  Data Store offers the same data but needs a personal token.
+- **Wind (ASSUMPTION):** one generic turbine for all zones: no output below 3 m/s,
+  rising with the cube of the wind speed to full output at 12 m/s, off from 25 m/s.
+  Hub heights, turbine types and wake losses are not modelled.
+- **Solar (ASSUMPTION):** output proportional to the radiation on a horizontal plane,
+  full output at 1000 W/m2. Panel tilt, orientation and temperature are not modelled.
+- **Zone (ASSUMPTION):** the mean over the ERA5 grid points inside the zone's NUTS2
+  regions (2 points for Berlin up to 66 for Niedersachsen-Nord), not weighted by where
+  the plants stand. Bremen holds no grid point and uses the nearest one.
+- **Hours:** ERA5 wind is the value at the full hour, so an hour uses the mean of its
+  start and end; radiation is the sum over the hour before the time stamp, so an hour
+  uses the value stamped at its end.
+- **Offshore wind** is not covered: it keeps its capacity shares. Both zones in which
+  TenneT's offshore wind comes ashore lie on the North Sea coast.
+- **Check:** capacity (`capacity_by_zone.csv`) times factor, summed per TSO zone,
+  correlates with SMARD's hourly series at 0.96 for onshore wind (0.90 in TransnetBW)
+  and 0.98 for solar in 2023. The levels differ (solar is up to 84 % too high, since
+  full output is assumed at 1000 W/m2), which the split above cancels out.
+
