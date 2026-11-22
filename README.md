@@ -110,7 +110,9 @@ Runs of up to 3 missing hours are interpolated and logged; longer gaps stop the 
 With `--reference`, annual totals are compared with Bundesnetzagentur figures (±5 %).
 
 `injections` splits each TSO zone's series over its zones: demand by population share,
-wind and solar by capacity share (`--population-shares`, `--capacity-shares`). It writes
+wind and solar by capacity share (`--population-shares`, `--capacity-shares`). With
+`--sector-demand` demand is split by the annual use of households, commerce and industry
+at each zone and an hourly profile per sector instead (docs/DATA.md). It writes
 hourly demand, feed-in and net injection per zone, the shares used and an energy-balance
 report per TSO zone.
 

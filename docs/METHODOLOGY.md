@@ -43,6 +43,7 @@ Outputs: `fee_signal` and `fee_signal_class` (hours x zones, CSV or Parquet) and
 | Input of the OPF | Source | Status |
 | --- | --- | --- |
 | Demand per zone | SMARD load per TSO zone x population share | Eurostat population with `--population-shares data/shares/population_shares.csv`, else placeholders |
+| Demand per substation (substation network) | SMARD load per TSO zone, split hour by hour by annual use per sector x sector profile | DemandRegio 2017 with `--sector-demand`; in place of the population share |
 | Wind and solar per zone, cost 0, can be curtailed | SMARD per TSO zone x capacity share | MaStR capacity with `--capacity-shares data/shares/capacity_shares.csv`, else placeholders |
 | Exchange with each neighbour | SMARD physical net export, summed over TSO zones: a load at the boundary zone when exporting, a free feed-in that can be curtailed when importing | observed; cut to the line capacity where it exceeds it |
 | All other generation | one "residual" generator per zone, same marginal cost everywhere; capacity = zone share x the year's highest national generation other than wind and solar (SMARD) | MaStR capacity with `--residual-shares data/shares/residual_shares.csv`, else a placeholder (share of demand) |
