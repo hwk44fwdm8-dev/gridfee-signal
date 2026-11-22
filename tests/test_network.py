@@ -147,28 +147,3 @@ def test_de38_has_the_38_regions_of_de22_with_the_same_tso():
         region: de22.zone_to_tso[zone] for region, zone in region_zone.items()
     } == de38.zone_to_tso
     assert sorted(de38.boundary_zone_ids) == sorted(de22.boundary_zone_ids)
-
-
-def test_every_ac_line_of_de38_is_made_of_circuits_that_jao_lists():
-    lines = {row["line_id"]: row for row in _rows(NETWORKS / "de38/lines.csv")}
-    parts = {row["line_id"]: row for row in _rows(NETWORKS / "de38/lines_parts.csv")}
-    circuits = _rows(NETWORKS / "de38/jao_circuits.csv")
-    listed = {row["line_id"] for row in circuits}
-
-    assert len({row["eic"] for row in circuits}) == len(circuits)
-    assert {row["limit_kind"] for row in circuits} <= {"fixed", "period", "dlr_max"}
-    ac = {line for line, row in parts.items() if float(row["ac_rating_mva"]) > 0}
-    assert ac == listed
-    assert set(lines) - ac == {"BE-DEA2", "DE80-DK2", "DEF0-NO2", "DEF0-SE4"}  # DC only
-    for line in listed:
-        assert int(parts[line]["circuits"]) == sum(row["line_id"] == line for row in circuits)
-        rating = float(parts[line]["ac_rating_mva"]) * 0.7 + float(parts[line]["dc_rating_mw"])
-        assert float(lines[line]["capacity_mw"]) == pytest.approx(rating, abs=0.11)
-
-
-def test_jao_places_only_name_zones_of_de38():
-    zones = set(load_network(NETWORKS / "de38").zone_ids)
-    places = _rows(NETWORKS / "de38/jao_places.csv")
-    assert {row["value"] for row in places if row["kind"] == "zone"} <= zones
-    assert {row["kind"] for row in places} == {"alias", "zone"}
-    assert all(row["basis"] for row in places)

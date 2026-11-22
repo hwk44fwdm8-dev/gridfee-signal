@@ -2,8 +2,6 @@
 # scripts/derive_de22_network.py from PyPSA-Eur's prebuilt electricity network 0.8
 # (OpenStreetMap data, 220 kV and above, in service). See docs/NETWORK.md.
 # capacity_mw = 0.7 x summed thermal rating of the AC lines + rating of DC links.
-# The four lines in jao_circuits.csv take their rating from the maximum currents
-# that JAO's Core Static Grid Model publishes; the 0.7 stays an assumption.
 # Data licence: ODbL 1.0, (c) OpenStreetMap contributors; see LICENSE-DATA.md.
 line_id,from_zone,to_zone,susceptance_mw_per_rad,capacity_mw
 AT-DE13,AT,DE13,12366.9,2752.7
@@ -22,8 +20,8 @@ DE03-DE07,DE03,DE07,4996.7,2377.3
 DE03-DK2,DE03,DK2,600.0,600.0
 DE04-DE06,DE04,DE06,26905.7,6819.2
 DE04-PL,DE04,PL,6350.5,2377.3
-DE05-DE06,DE05,DE06,8758.1,3317.2
-DE05-DE09,DE05,DE09,8302.8,2902.6
+DE05-DE06,DE05,DE06,8758.1,2377.3
+DE05-DE09,DE05,DE09,8302.8,2377.3
 DE06-DE12,DE06,DE12,18831.4,4754.7
 DE06-DE16,DE06,DE16,5815.9,2377.3
 DE07-DE08,DE07,DE08,32405.3,9509.4
@@ -49,9 +47,9 @@ DE12-DE20,DE12,DE20,3261.5,1188.7
 DE13-DE14,DE13,DE14,9280.9,2377.3
 DE14-DE22,DE14,DE22,21150.9,2721.4
 DE16-DE17,DE16,DE17,58297.5,12074.4
-DE16-DE20,DE16,DE20,9563.4,2852.8
+DE16-DE20,DE16,DE20,9563.4,2377.3
 DE17-DE18,DE17,DE18,27194.5,4598.3
-DE17-DE20,DE17,DE20,6626.7,2656.2
+DE17-DE20,DE17,DE20,6626.7,1720.4
 DE17-LU,DE17,LU,12422.8,2408.6
 DE18-FR,DE18,FR,19429.7,2784.0
 DE19-DE20,DE19,DE20,49410.2,6287.4

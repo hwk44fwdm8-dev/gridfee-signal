@@ -239,9 +239,8 @@ For the run with bounds per day:
   plants there (redispatch, grid reserve); the model has no such plants. These hours
   are kept out of the signal. With bounds per week it is 5 hours (1.3 GWh).
 - **The line capacities are assumptions**, and the signal now rests on four of them.
-  With published limits on these four lines the signal shrinks to 21 hours and the
-  unserved load disappears: see
-  [2023 with published limits](#2023-with-published-limits-on-the-four-priced-lines).
+  A run with published limits on them is not public (see
+  [Runs on networks with published limits](#runs-on-networks-with-published-limits)).
 - **The costs are assumptions** (generic lignite price and other variable costs, one
   CO2 price and one hard coal price for the year, import price of gas with an unknown
   heating value basis, a plant list of 2020). No sensitivity run was made.
@@ -299,117 +298,23 @@ inference, not a published fact). The
 check cannot confirm the four lines themselves: redispatch is not published per line.
 
 
-## 2023 with published limits on the four priced lines
+## Runs on networks with published limits
 
-The runs above use the standard ratings of the OpenStreetMap data for every line. The
-four lines between German zones that carried the fee signal now take their rating from
-the maximum currents in JAO's Core Static Grid Model
-([NETWORK.md](NETWORK.md#published-limits-for-four-lines-jao)); their capacities rise by
-20 to 54 %. The same run as "bounds per day" above, on 22 November 2026:
-
-| Hours in 2023 | Standard ratings | Published limits on four lines |
-| --- | --- | --- |
-| Hours in the fee signal | 8,686 | 8,756 |
-| Fee signal not neutral | 312 (3.6 %) | 21 (0.2 %) |
-| Hours with unserved load, kept out of the signal | 70 (22.6 GWh) | 0 |
-| Hessen–BW-Karlsruhe priced | 101 | 6 |
-| Rheinland-Pfalz–BW-Karlsruhe priced | 89 | 0 |
-| Sachsen-Anhalt–Thüringen priced | 86 | 0 |
-| Sachsen-Anhalt–Niedersachsen-Süd priced | 60 | 15 |
-
-- **Most of the earlier signal came from the estimated limits.** With the published
-  limits 21 hours remain, on two lines. The unserved load in BW-Karlsruhe is gone, so
-  it was a result of the two lines into that zone being rated too low.
-- **Where:** as before, negative in Baden-Württemberg (mean over the 21 hours
-  -25 EUR/MWh in BW-Karlsruhe) and positive in the east (+25 EUR/MWh in
-  Sachsen-Anhalt). Validation 13 of 13; the fuel mix is bounded by observation as
-  before.
-- **Against redispatch:** all 21 hours had redispatch (mean 9,367 MWh per hour against
-  2,283 in the other hours; 18 of the 21 are in the tenth of the hours with the most
-  redispatch). They hold 0.2 of the year's 20.1 TWh, 1 %. Direction: 50Hertz lowered
-  and TransnetBW raised in all 21 hours, as the signal says; Amprion again has the
-  wrong sign in the 6 hours with Hessen–BW-Karlsruhe priced.
-- **What this means.** Real redispatch ran in 6,180 of 8,756 hours. A model with one
-  line per pair of zones and realistic limits on those lines sees almost none of it:
-  the congestion behind redispatch is mostly on single circuits and inside zones, with
-  N-1 margins that the flat 0.7 does not describe. The 21 hours are a consistent but
-  very small sample, and the limit of Hessen–BW-Karlsruhe is an upper bound
-  (`DLRmax`).
-
-
-## 2023 on the 38 NUTS2 regions with published limits on every line
-
-The same run as "bounds per day", on `data/networks/de38`
-([NETWORK.md](NETWORK.md#the-38-region-network-of-germany-datanetworksde38)): the OPF is
-solved for the 38 NUTS2 regions, every AC line has the reactance and the maximum
-current that the TSOs publish through JAO, and shares, weather factors and plant
-classes are built per region (`data/shares/de38`, `data/weather/de38`). Run on
-22 November 2026:
-
-```bash
-S=data/shares/de38
-gridfee backcast --year 2023 --network data/networks/de38 \
-    --population-shares $S/population_shares.csv --capacity-shares $S/capacity_shares.csv \
-    --capacity-factors data/weather/de38/capacity_factors_2023.csv \
-    --generation-shares $S/generation_shares.csv \
-    --generation-costs data/costs/generation_costs_2023.csv \
-    --plant-efficiency $S/plant_efficiency.csv --fuel-prices data/costs/fuel_prices_2023.csv \
-    --plant-window day --borders-by-tso \
-    --report-zones data/networks/de22/zone_nuts2.csv --report-weights $S/capacity_by_zone.csv
-```
-
-| Hours in 2023 | 22 zones, published limits on four lines | 38 regions, published limits on every line |
-| --- | --- | --- |
-| Hours in the fee signal | 8,756 | 8,370 |
-| Fee signal not neutral | 21 (0.2 %) | 1,007 (12.0 %) |
-| Lines between German zones with a price | 2 | 10 |
-| Hours with unserved load, kept out of the signal | 0 | 386 (125.1 GWh) |
-| Signal hours with redispatch | 21 of 21 | 906 of 1,007 |
-| Redispatch per hour, signal hours against other hours | 9,367 against 2,283 MWh | 5,179 against 1,640 MWh |
-| Share of the redispatch volume in signal hours | 1 % | 30 % (5.2 of 17.3 TWh) |
-
-- **The signal now covers a real part of the congestion.** 1,007 hours are not
-  neutral, 581 of them in the fifth of the hours with the most redispatch, and they
-  hold 30 % of the redispatch volume of the hours solved.
-- **Three weak lines carry most of it.** Bremen–Lüneburg is priced in 393 hours (one
-  380 kV and one 220 kV circuit, 1,274 MW), Oberpfalz–Mittelfranken in 313 (one 220 kV
-  circuit, 292 MW) and Niederbayern–Mittelfranken in 213 (one 220 kV circuit, 294 MW).
-  The other seven lines together are priced in 72 hours. Whether these three are the
-  real bottlenecks is not shown: redispatch is not published per line, and a single
-  220 kV circuit next to 380 kV lines is where the DC model overstates congestion
-  ([NETWORK.md](NETWORK.md#the-38-region-network-of-germany-datanetworksde38)). In the
-  313 hours of Oberpfalz–Mittelfranken redispatch was not above average (2,135 MWh
-  per hour), which speaks against that line; in the hours of the other two it was
-  far above (7,395 and 5,612).
-- **Direction per TSO zone** (hours with the same direction of signal and redispatch,
-  of the hours compared): Amprion 681 of 797, TransnetBW 620 of 820, 50Hertz 504 of
-  818, TenneT 463 of 872. Amprion had the wrong sign on the 22 zones. TenneT reaches
-  from the North Sea to Austria and cannot be judged as one area.
-- **Unserved load in 386 hours**, 279 of them at the Polish border and 154 in
-  Niederbayern (an hour can have both). To Poland the published limit of
-  Vierraden–Krajnik (1,500 A, PSE's side) gives 1,382 MW, and the model cannot steer
-  the export between that line and Hagenwerder–Mikulowa as the phase shifters there
-  do. In Niederbayern the 294 MW line to Mittelfranken is full while the region
-  imports. Both are limits of the model, not findings; the hours are kept out of the
-  signal as before.
-- **Validation** 13 of 13. Flows to four neighbours were cut to the line capacity
-  (see NETWORK.md), most to the Netherlands from TenneT (62 GWh).
+The runs above use the standard ratings of the OpenStreetMap data for every line.
+Runs with the limits that the TSOs publish through JAO's Core Static Grid Model (the
+22 zones with published limits on four lines, the 38 NUTS2 regions and the substation
+network with published limits on every line) and their results are kept in the private
+repository [gridfee-signal-private](https://github.com/hwk44fwdm8-dev/gridfee-signal-private), because
+JAO's terms of use do not allow passing on anything derived from its data.
 
 ### The signal for the 22 zones (`fee_signal_report*`)
 
-`--report-zones` writes, besides the signal per region, the signal for the 22 zones:
-each zone's signal is the mean of its regions' signals, weighted by population
-(`--report-weights`). A battery's region inside a zone is not known to this file, and
-population stands in for where connections are; that is an assumption.
-
-The mean hides what happens inside a zone. In the 1,007 signal hours the regions of
-one zone have opposite signs in 816 hours in Bayern-Nord (Oberpfalz, Oberfranken,
-Mittelfranken, Unterfranken; mean spread 72 EUR/MWh), in 503 in NRW-Nord/Ost and in
-391 in Niedersachsen-Nord (Lüneburg and Weser-Ems, on either side of Bremen). For
-these zones the 22-zone value says little about a single site; `fee_signal.csv` has
-the regions. Mean signal over the signal hours: most positive in Hamburg/Schleswig-
-Holstein (+34 EUR/MWh), Mecklenburg-Vorpommern (+26) and Brandenburg (+24), most
-negative in Bremen (-45), Bayern-Mitte (-21) and Bayern-Süd/West (-16).
+On a finer network, `--report-zones` writes, besides the signal per region, the signal
+for the 22 zones: each zone's signal is the mean of its regions' signals, weighted by
+population (`--report-weights`). A battery's region inside a zone is not known to this
+file, and population stands in for where connections are; that is an assumption. The
+mean hides what happens inside a zone: regions of one zone can have opposite signs in
+the same hour, and `fee_signal.csv` has the regions.
 
 ## Two-run method: market run, then grid run (`gridfee backcast --method two-run`)
 
