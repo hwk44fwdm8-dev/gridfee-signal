@@ -116,11 +116,16 @@ def run_two_run_backcast(
     threshold: float = 0.0,
     costs: RedispatchCosts | None = None,
     chunk_hours: int = DEFAULT_CHUNK_HOURS,
+    block_hours: int | None = None,
+    workers: int = 1,
 ) -> TwoRunResult:
     """Market run on one bus, then the grid run that removes the overloads.
 
     Arguments as for :func:`gridfee.backcast.run_backcast`. ``chunk_hours`` hours are
     solved at a time to bound memory; the results do not depend on it.
+    ``block_hours`` and ``workers`` are those of :func:`gridfee.flows.run_dc_opf`
+    and apply to the grid run, which is the one that carries the network; with
+    ``block_hours`` the grid run is not chunked a second time.
 
     Hours in which either run leaves load unserved are not part of the signal, as in
     the single run. Where several generators have the same cost, the market run's
@@ -130,6 +135,8 @@ def run_two_run_backcast(
     if chunk_hours < 1:
         raise BackcastError("chunk_hours must be at least 1")
     index = inputs.load_mw.index if hours is None else pd.Index(hours)
+    if block_hours is not None:
+        chunk_hours = max(chunk_hours, len(index))
     chunks = [index[start : start + chunk_hours] for start in range(0, len(index), chunk_hours)]
     generators = inputs.generators
 
@@ -235,6 +242,8 @@ def run_two_run_backcast(
             snapshots=market_runs[position].dispatch_mw.index,
             load_shedding_cost=load_shedding_cost,
             ptdf_reference=inputs.ptdf_reference,
+            block_hours=block_hours,
+            workers=workers,
         )
         for position in range(len(chunks))
     ]
