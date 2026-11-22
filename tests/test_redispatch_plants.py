@@ -138,10 +138,14 @@ def test_committed_table():
     assert table.loc[by_list, "basis"].isin(["network_node", "nearest"]).all()
     assert table.loc[by_list, "distance_km"].between(0, 40).all()
     assert (table.loc[~by_list & (table["located_by"] != "none"), "basis"] == "name").all()
-    assumed = table["located_by"].isin(["same_site", "landing_point", "cluster_code"])
+    assumed = table["located_by"].isin(
+        ["same_site", "connection_point", "landing_point", "cluster_code"]
+    )
     assert table.loc[assumed, "note"].ne("").all()
     # A cluster code is the short name of a substation of the grid operator's area.
     assert places.loc["50H_AVA_CR_WOL"].tolist() == ["wolmirstedt", "DE05", "DEE0"]
+    # The 380 kV plant at Wilhelmshaven is not at Maade, which has 220 kV only.
+    assert places.loc["Wilhelmshaven (ENGIE)", "substation_id"] == "fedderwarden"
     # Offshore wind farms stand at the grid connection points of the NEP.
     landing = table[table["located_by"] == "landing_point"].set_index("plant")["substation_id"]
     assert landing.to_dict() == {
