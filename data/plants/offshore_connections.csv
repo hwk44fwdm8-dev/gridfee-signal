@@ -1,0 +1,67 @@
+# Where the offshore wind farms in operation in 2023 feed into the onshore grid.
+# location_id, farm and mastr_connection_point are MaStR's (LokationMaStRNummer of the
+# units, NameDerTechnischenLokation, and NetzanschlusspunktBezeichnung without the cable
+# number, from Lokationen*.xml and Netzanschlusspunkte*.xml of the full export of
+# 1 October 2026; Bundesnetzagentur, dl-de/by-2-0). The last part of a North Sea label
+# is the far end of the farm's cable: a converter platform (BWAL BorWin alpha, BWBE
+# BorWin beta, BWGA BorWin gamma, DWAL/DWBE/DWGA DolWin alpha to gamma, HWAL/HWBE HelWin
+# alpha and beta, SWAL SylWin alpha) or a substation on land (INHA Inhausen, EMDB
+# Emden/Borssum, HAMA Hagermarsch); system is the connection system read from it (AC: a
+# cable without converter).
+# nep_connection and substation_id: that system's row and grid connection point in the
+# Netzentwicklungsplan Strom 2037/2045 (2023), 2nd draft, chapter 4, tables 15 to 18
+# (https://www.netzentwicklungsplan.de/sites/default/files/2023-06/NEP_2037_2045_V2023_2_Entwurf_Kap4_0.pdf),
+# as substation_id of data/networks/desub/substations.csv. The NEP names connections,
+# not wind farms; which farm is on which connection is this file's reading of MaStR.
+# ASSUMPTION: Baltic 1 and 2 are OST-3-1 and OST-3-2 (Kriegers Flak, 2011 and 2015);
+# Arkona and Wikinger are on Ostwind 1 and Arcadis Ost 1 on Ostwind 2 (50Hertz's
+# project pages; OST-1 and OST-2 stand for OST-1-1 to OST-1-3 and OST-2-1 to OST-2-3).
+# ASSUMPTION: Global Tech I is on BorWin3 (Emden/Ost), as the German Wikipedia's
+# article on the platform BorWin gamma says, although its MaStR label ends at BorWin
+# beta (BorWin2, Diele); 400 MW.
+# Riffgat is at Emden/Borssum as in the NEP; TenneT's project page has it at Emden/Ost
+# since spring 2023 (data/redispatch/plants_2023.csv keeps Emden/Borssum too).
+# alpha ventus lands at Hagermarsch (110 kV), which is not in the substation list:
+# substation_id is empty and it is placed like any other plant.
+# Farms that came into operation later are not listed.
+location_id,farm,mastr_connection_point,system,nep_connection,substation_id
+SEL932462285544,BAOE C01,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL946962777881,BAOE C02,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL994043638538,BAOE C03,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL949955396267,BAOE C04,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL950131862742,BAOE C05,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL983244211640,BAOE C06,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL911021271365,BAOE C07,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL976916410021,BAOE C08,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL953673961584,BAOE C09,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL961507110404,BAOE C10,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL976480917483,BAOE C11,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL941572388809,BAOE C12,L-155-BAOE-BWAL,BorWin1,NOR-6-1,diele
+SEL947312274135,Borkum Riffgrund 1,L-155-BRGE-DWAL,DolWin1,NOR-2-2,doerpen-w
+SEL903815302577,Borkum Riffgrund 2,L-155-BRGZ-DWGA,DolWin3,NOR-2-3,doerpen-w
+SEL980321898176,Albatros,L-155-ALBA-BWBE,BorWin2,NOR-6-2,diele
+SEL947778987563,Alpha Ventus,L-110-ALVS-HAMA-BLAU,AC,NOR-2-1,
+SEL922199100944,Amrumbank,L-155-AMRW-HWBE,HelWin2,NOR-4-2,buettel
+SEL996836374951,Arcadis Ost I,OWP Arcardis Ost I,Ostwind 2,OST-2,lubmin
+SEL919746983181,Arkona,Offshore Plattform Arkona,Ostwind 1,OST-1,lubmin
+SEL943058624104,Baltic 1,Offshore Plattform Baltic 1,AC,OST-3-1,bentwisch
+SEL990492206410,Baltic 2,Offshore Plattform Baltic 2,AC,OST-3-2,bentwisch
+SEL928599601562,Butendiek,L-155-BUTD-SWAL,SylWin1,NOR-5-1,buettel
+SEL960138676303,DanTysk,L-155-DYSK-SWAL,SylWin1,NOR-5-1,buettel
+SEL964485571465,Deutsche Bucht,L-155-DEBU-BWBE,BorWin2,NOR-6-2,diele
+SEL998582120202,GlobalTech1,L-155-GLTE-BWBE,BorWin3,NOR-8-1,emden-o
+SEL964827249373,Gode Wind 1,L-155-GOWE-DWBE,DolWin2,NOR-3-1,doerpen-w
+SEL943629000788,Gode Wind 2,L-155-GOWZ-DWBE,DolWin2,NOR-3-1,doerpen-w
+SEL919786394244,Hohe See,L-155-HOSE-BWGA,BorWin3,NOR-8-1,emden-o
+SEL974560618633,Kaskasi,L-155-KAKA-HWBE,HelWin2,NOR-4-2,buettel
+SEL906065107428,Meerwind,L-155-MEWI-HWAL,HelWin1,NOR-4-1,buettel
+SEL925169438559,Merkur,L-155-MEKU-DWGA,DolWin3,NOR-2-3,doerpen-w
+SEL933375144706,Nordergründe,L-155-NORG-INHA,AC,NOR-0-2,inhausen
+SEL932958083050,Nordsee One,L-155-NOON-DWBE,DolWin2,NOR-3-1,doerpen-w
+SEL969972182469,Nordsee Ost,L-155-NOSO-HWAL,HelWin1,NOR-4-1,buettel
+SEL941255164959,Riffgat,L-155-RIFF-EMDB,AC,NOR-0-1,emden-borssum
+SEL919433257267,Sandbank,L-155-SNDB-SWAL,SylWin1,NOR-5-1,buettel
+SEL900790170542,Trianel WP Borkum,L-155-BOWZ-DWAL,DolWin1,NOR-2-2,doerpen-w
+SEL988334563685,Trianel WP Borkum 2,L-155-BOWZ-DWAL,DolWin1,NOR-2-2,doerpen-w
+SEL929196129428,Veja Mate,L-155-VEMA-BWBE,BorWin2,NOR-6-2,diele
+SEL997728577467,Wikinger,Offshore Plattform Wikinger,Ostwind 1,OST-1,lubmin

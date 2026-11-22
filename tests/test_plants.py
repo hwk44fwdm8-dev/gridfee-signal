@@ -17,7 +17,7 @@ from gridfee.injections.plants import (
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from build_plant_table import PLANT_LIST_POSITIONS, build_table  # noqa: E402
+from build_plant_table import CONNECTIONS, PLANT_LIST_POSITIONS, build_table, grid_connections  # noqa: E402
 from place_plants import place, with_plant_list_positions  # noqa: E402
 
 PLANTS = ROOT / "data" / "plants" / "plants_2023.csv"
@@ -128,6 +128,52 @@ def test_plants_go_to_the_nearest_substation():
     placement = nearest_substation(frame, SUBSTATIONS)
     assert list(placement["substation_id"]) == ["A", "B"]
     assert placement["distance_km"][0] == pytest.approx(55.6, abs=0.1)
+
+
+def test_offshore_wind_goes_to_its_grid_connection_however_far():
+    frame = plants(
+        [
+            ["p1", "wind_offshore", 10.0, "z1", 50.1, 8.0],
+            ["p2", "wind_offshore", 5.0, "z1", 50.1, 8.0],
+        ]
+    ).assign(grid_connection=["B", None])
+    placement = place(frame, SUBSTATIONS)
+    assert list(placement["substation_id"]) == ["B", "A"]
+    assert list(placement["placement_basis"]) == ["grid_connection", "nearest"]
+    assert placement["distance_km"][0] == pytest.approx(211.3, abs=0.1)
+    with pytest.raises(PlantError, match="not in the substation list"):
+        place(frame.assign(grid_connection=["C", None]), SUBSTATIONS)
+
+
+def test_grid_connections_are_looked_up_by_location_for_offshore_wind_only():
+    units = pd.DataFrame(
+        {
+            "LokationMaStRNummer": ["L1", "L2", "L3", "L1"],
+            "technology": ["wind_offshore", "wind_offshore", "wind_offshore", "wind_onshore"],
+        }
+    )
+    connections = pd.DataFrame({"location_id": ["L1", "L2"], "substation_id": ["A", None]})
+    found = grid_connections(units, connections)
+    assert found.iloc[0] == "A"
+    assert found.iloc[1:].isna().all()
+
+
+def test_offshore_connections_name_substations_of_the_list_and_cover_the_farms():
+    connections = pd.read_csv(CONNECTIONS, comment="#")
+    assert connections["location_id"].is_unique
+    substations = pd.read_csv(DESUB / "substations.csv", comment="#")
+    ids = set(substations.loc[substations["kind"] == "substation", "substation_id"])
+    assert set(connections["substation_id"].dropna()) <= ids
+    # One connection system ends at one substation.
+    known = connections[connections["system"] != "AC"]
+    assert (known.groupby("system")["substation_id"].nunique() == 1).all()
+    table, _ = repository_tables()
+    offshore = table[table["technology"] == "wind_offshore"]
+    connected = offshore["grid_connection"].notna()
+    assert set(offshore.loc[connected, "grid_connection"]) <= ids
+    assert table.loc[table["technology"] != "wind_offshore", "grid_connection"].isna().all()
+    # All but alpha ventus, whose substation is not in the list.
+    assert offshore.loc[~connected, "capacity_mw"].sum() == pytest.approx(60.0, abs=0.5)
 
 
 def test_a_plant_without_position_follows_its_technology_in_its_zone_then_in_germany():

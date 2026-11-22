@@ -42,6 +42,7 @@ from gridfee.injections.zone_shares import fill_zone_from_district, in_operation
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "plants" / "plants_2023.csv"
+CONNECTIONS = ROOT / "data" / "plants" / "offshore_connections.csv"
 # Not committed (data/cache is ignored): the plant list states no licence.
 PLANT_LIST_POSITIONS = ROOT / "data" / "cache" / "plant_list_positions.csv"
 COLUMNS = {
@@ -146,6 +147,14 @@ def select_units(
     return units, tidy(pd.concat(reference, ignore_index=True))[columns]
 
 
+def grid_connections(units: pd.DataFrame, connections: pd.DataFrame) -> pd.Series:
+    """The substation each offshore wind unit feeds into, where the lookup names one."""
+    known = connections.dropna(subset=["substation_id"])
+    known = known.set_index("location_id")["substation_id"]
+    found = units["LokationMaStRNummer"].map(known)
+    return found.where(units["technology"] == "wind_offshore")
+
+
 def build_table(
     units: pd.DataFrame,
     position: pd.DataFrame,
@@ -160,6 +169,7 @@ def build_table(
     table = units[
         ["plant_id", "name", "technology", "capacity_mw", "state", "district", "ags", "zone"]
     ].join(position)
+    table["grid_connection"] = units.get("grid_connection")
     table["units"] = 1
     small = table["capacity_mw"] < min_mw
     if municipalities is not None:
@@ -194,6 +204,7 @@ def build_table(
             "lat",
             "lon",
             "location_basis",
+            "grid_connection",
         ]
     ]
 
@@ -234,6 +245,7 @@ def main() -> None:
     source = (args.mastr / "SOURCE.txt").read_text(encoding="utf-8").strip().rsplit("/", 1)[-1]
 
     units, reference = select_units(args.mastr, args.date, DE22, SHARES)
+    units["grid_connection"] = grid_connections(units, pd.read_csv(CONNECTIONS, comment="#"))
     blocks, sites = plant_number_positions(pd.read_csv(args.plant_list))
     municipalities = reference_positions(reference, "ags")
     position = locate_units(
@@ -280,7 +292,8 @@ def main() -> None:
             "  postcode      the same by postcode",
             "  district      ASSUMPTION: the same by district (Landkreis), tens of km off",
             "  missing       none of these; no position (and no lat/lon)",
-            "Offshore wind has its position at sea, not where it comes ashore.",
+            "Offshore wind has its position at sea; grid_connection is the substation its",
+            f"cable ends at, from {CONNECTIONS.name} (empty: not known or not offshore).",
             "Built by scripts/build_plant_table.py; see docs/DATA.md.",
         ],
         table,

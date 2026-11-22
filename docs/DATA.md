@@ -298,9 +298,22 @@ The 13.9 GW placed by district are mostly gas (7.4 GW), hard coal (2.5 GW) and l
 totals per technology are the plants'. ASSUMPTION: the nearest substation is where a
 plant feeds in, whatever its voltage level and whichever lower-voltage grid lies in
 between; capacity-weighted, plants are 3 km (hard coal) to 17 km (wind, biomass) from
-their substation. Offshore wind goes to the substation nearest to its position at sea
-(98 km on average), not to where its cable comes ashore, and a substation's zone can
-differ from the plant's `zone_de22`.
+their substation. A substation's zone can differ from the plant's `zone_de22`.
+
+Offshore wind (8.4 GW) feeds in where its cable ends, not at the substation nearest to
+its position at sea. `data/plants/offshore_connections.csv` has, per wind farm of
+MaStR, the connection system its MaStR grid connection point names and that system's
+grid connection point in the Netzentwicklungsplan 2037/2045 (2023), 2nd draft,
+chapter 4, tables 15 to 18, the source `data/redispatch/plants_2023.csv` uses too; the
+plant table carries it as `grid_connection`. That puts 2.5 GW at Dörpen/West, 2.1 GW
+at Büttel, 1.2 GW at Diele, 1.0 GW at Lubmin, 0.9 GW at Emden/Ost, 0.4 GW at Bentwisch
+and 0.1 GW each at Inhausen and Emden/Borssum. The NEP names connections, not wind
+farms, so which farm is on which connection is read from MaStR's labels and is not
+checked against a TenneT or 50Hertz list of farms. ASSUMPTION: Global Tech I (400 MW)
+is on BorWin3 at Emden/Ost although its MaStR label names BorWin beta (Diele).
+Riffgat (113 MW) is at Emden/Borssum as in the NEP; TenneT has it at Emden/Ost since
+spring 2023. alpha ventus (60 MW) lands at Hagermarsch, a 110 kV substation that is
+not in the list, and goes to the nearest one, Emden/Borssum.
 
 ## Generation costs per fuel (ASSUMPTION)
 
