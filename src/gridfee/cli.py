@@ -12,6 +12,7 @@ from gridfee.backcast import BackcastError, build_backcast_inputs, run_backcast
 from gridfee.data import smard
 from gridfee.flows import OPFError, OPFResult, run_dc_opf
 from gridfee.injections import build_historical_injections, check_energy_balance, read_shares
+from gridfee.injections.weather import read_capacity_factors
 from gridfee.network import NetworkConfigError, ZoneNetwork, load_network, load_zones
 from gridfee.signal import NEUTRAL, SignalError, compute_fee_signal, write_signal
 from gridfee.validation import FAIL, ValidationError, validate_backcast, write_report
@@ -131,6 +132,11 @@ def injections(
     capacity_shares: Path | None = typer.Option(
         None, help="CSV technology,zone_id,share. Default: placeholders."
     ),
+    capacity_factors: Path | None = typer.Option(
+        None,
+        help="CSV of hourly capacity factors per zone (scripts/build_capacity_factors.py). "
+        "Default: every zone of a TSO zone has the TSO zone's hourly shape.",
+    ),
     out: Path = typer.Option(Path("results/injections"), help="Output directory."),
 ) -> None:
     """Split the TSO-zone load and wind/solar series of a year over the zones."""
@@ -147,6 +153,9 @@ def injections(
             tso_res,
             None if population_shares is None else read_shares(population_shares),
             None if capacity_shares is None else read_shares(capacity_shares, "technology"),
+            capacity_factors=None
+            if capacity_factors is None
+            else read_capacity_factors(capacity_factors),
         )
         balance = check_energy_balance(zone_list, result, tso_load, tso_res)
     except (NetworkConfigError, smard.SmardError, OSError, ValueError) as err:
@@ -255,6 +264,11 @@ def backcast(
     capacity_shares: Path | None = typer.Option(
         None, help="CSV technology,zone_id,share. Default: placeholders."
     ),
+    capacity_factors: Path | None = typer.Option(
+        None,
+        help="CSV of hourly capacity factors per zone (scripts/build_capacity_factors.py). "
+        "Default: every zone of a TSO zone has the TSO zone's hourly shape.",
+    ),
     residual_shares: Path | None = typer.Option(
         None,
         help="CSV zone_id,share: each zone's share of Germany's generation other than wind "
@@ -299,6 +313,9 @@ def backcast(
             tso_res,
             None if population_shares is None else read_shares(population_shares),
             None if capacity_shares is None else read_shares(capacity_shares, "technology"),
+            capacity_factors=None
+            if capacity_factors is None
+            else read_capacity_factors(capacity_factors),
         )
         inputs = build_backcast_inputs(
             network,
@@ -343,6 +360,12 @@ def backcast(
             notes.append(
                 "PLACEHOLDER zone shares were used for: " + ", ".join(placeholders) + ". The "
                 "results do not show where power is produced or used."
+            )
+        if capacity_factors is not None:
+            notes.append(
+                f"Wind and solar feed-in is split over the zones of each TSO zone hour by hour "
+                f"with the capacity factors in {capacity_factors.name}, built from weather data "
+                "with a generic power curve (an ASSUMPTION, docs/DATA.md)."
             )
         for row in inputs.clipped_exchange.itertuples():
             notes.append(

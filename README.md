@@ -17,9 +17,11 @@ backcast runs end to end. Scenarios and dispatch are not built yet (see
 **Read before using results:** the lines between the 22 zones are an assumption derived
 from open data ([docs/NETWORK.md](docs/NETWORK.md)). The shares that place load and
 generation in the zones are placeholders unless the files in `data/shares/` (Eurostat
-population, MaStR capacity) are passed. Either way the 2023 backcast finds almost no
-congestion between German zones and a neutral fee signal in more than 99.6 % of hours
-([docs/METHODOLOGY.md](docs/METHODOLOGY.md)).
+population, MaStR capacity) are passed. Either way, and also with hourly wind and solar
+per zone from ERA5 weather data (`data/weather/`), the 2023 backcast gives a neutral fee
+signal in more than 99.6 % of hours. Lines between German zones do reach their capacity
+in over 1,000 hours, but without a price, because all generation other than wind and
+solar has one cost ([docs/METHODOLOGY.md](docs/METHODOLOGY.md)).
 
 ## Quick start
 
@@ -100,6 +102,9 @@ Read [docs/DATA.md](docs/DATA.md) before using the output. In short:
   zone gets the same share, and the output flags this (`shares.csv`, column
   `placeholder`, and a warning). `data/shares/` holds shares built from Eurostat
   population and the MaStR register; where offshore wind comes ashore is an assumption.
+- **Every zone of a TSO zone has the same hourly wind and solar shape** unless
+  `--capacity-factors` is given. `data/weather/capacity_factors_2023.csv` is built from
+  ERA5 with a generic power curve, which is an assumption.
 - **Four zones' TSO differs from the drafts** and several zones are split between two
   TSOs; see [TSO_SOURCES.md](data/networks/de22/TSO_SOURCES.md).
 

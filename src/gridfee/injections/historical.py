@@ -125,12 +125,19 @@ def build_historical_injections(
     population_shares: pd.DataFrame | None = None,
     capacity_shares: pd.DataFrame | None = None,
     balance_tolerance: float = 1e-6,
+    capacity_factors: Mapping[str, pd.DataFrame] | None = None,
 ) -> ZonalInjections:
     """Split TSO-zone series (hours x TSO zones, MW) over the zones.
 
     ``population_shares`` and ``capacity_shares`` are frames as returned by
     :func:`read_shares`; ``None`` means uniform placeholders. The energy balance of
     every TSO zone is checked before the result is returned.
+
+    ``capacity_factors`` gives, for some technologies, hourly factors per zone
+    (hours x zones). A zone's part of its TSO zone's feed-in in an hour is then its
+    capacity share times its factor, divided by the sum over the TSO zone; in hours
+    where that sum is 0 the capacity shares alone are used. The factors must cover
+    every hour and every zone that has a share above 0.
     """
     for technology, frame in tso_res_mw.items():
         if not frame.index.equals(tso_load_mw.index):
@@ -139,6 +146,10 @@ def build_historical_injections(
         unknown = sorted(set(capacity_shares["quantity"]) - set(tso_res_mw))
         if unknown:
             raise ValueError(f"capacity shares for technologies without data: {unknown}")
+    capacity_factors = dict(capacity_factors or {})
+    unknown = sorted(set(capacity_factors) - set(tso_res_mw))
+    if unknown:
+        raise ValueError(f"capacity factors for technologies without data: {unknown}")
 
     zone_ids = [zone.zone_id for zone in zones if zone.kind is ZoneKind.INTERNAL]
     without_load = sorted(
@@ -153,9 +164,10 @@ def build_historical_injections(
             raise ValueError(f"{quantity}: TSO-zone series contain missing values")
         shares = resolve_shares(zones, quantity, list(tso_mw.columns), given)
         share_frames.append(shares)
+        weights = _hourly_weights(quantity, shares, capacity_factors.get(quantity), tso_mw.index)
         zonal = pd.DataFrame(0.0, index=tso_mw.index, columns=zone_ids)
         for row in shares.itertuples():
-            zonal[row.zone_id] = tso_mw[row.tso_zone] * row.share
+            zonal[row.zone_id] = tso_mw[row.tso_zone] * weights[row.zone_id]
         return zonal
 
     def for_quantity(frame: pd.DataFrame | None, quantity: str) -> pd.DataFrame | None:
@@ -175,6 +187,33 @@ def build_historical_injections(
         failed = balance[~balance["passed"]]
         raise EnergyBalanceError(f"energy balance violated:\n{failed.to_string(index=False)}")
     return result
+
+
+def _hourly_weights(
+    quantity: str, shares: pd.DataFrame, factors: pd.DataFrame | None, hours: pd.Index
+) -> pd.DataFrame:
+    """Each zone's part of its TSO zone's series per hour (hours x zones)."""
+    static = shares.set_index("zone_id")["share"]
+    constant = pd.DataFrame(
+        np.tile(static.to_numpy(), (len(hours), 1)), index=hours, columns=static.index
+    )
+    if factors is None:
+        return constant
+    needed = static[static > 0].index
+    missing = sorted(set(needed) - set(factors.columns))
+    if missing:
+        raise ValueError(f"{quantity} capacity factors: missing zones {missing}")
+    aligned = factors.reindex(index=hours, columns=static.index).astype(float)
+    aligned.loc[:, static[static <= 0].index] = 0.0
+    if aligned.isna().any().any():
+        gaps = int(aligned.isna().any(axis=1).sum())
+        raise ValueError(f"{quantity} capacity factors: {gaps} hours are not covered")
+    if (aligned < 0).any().any() or not np.isfinite(aligned.to_numpy()).all():
+        raise ValueError(f"{quantity} capacity factors must be finite and not negative")
+    weighted = aligned * static
+    tso_of = shares.set_index("zone_id")["tso_zone"]
+    total = weighted.T.groupby(tso_of).transform("sum").T
+    return (weighted / total.where(total > 0)).where(total > 0, constant)
 
 
 def check_energy_balance(
