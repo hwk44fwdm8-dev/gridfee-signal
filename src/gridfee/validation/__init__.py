@@ -15,9 +15,23 @@ from gridfee.validation.redispatch import (
     read_redispatch,
     render_redispatch_report,
 )
+from gridfee.validation.redispatch_plants import (
+    hourly_redispatch_by_location,
+    locate_plants,
+    plant_locations,
+    read_plant_table,
+    redispatch_coverage,
+    render_coverage,
+)
 from gridfee.validation.report import render_report, write_report
 
 __all__ = [
+    "render_coverage",
+    "read_plant_table",
+    "plant_locations",
+    "locate_plants",
+    "hourly_redispatch_by_location",
+    "redispatch_coverage",
     "FAIL",
     "INFO",
     "PASS",

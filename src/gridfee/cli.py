@@ -39,13 +39,19 @@ from gridfee.validation import (
     ValidationError,
     compare_with_redispatch,
     hourly_redispatch,
+    plant_locations,
+    read_plant_table,
     read_redispatch,
+    redispatch_coverage,
+    render_coverage,
     render_redispatch_report,
     validate_backcast,
     write_report,
 )
 
 DE22 = Path("data/networks/de22")
+REDISPATCH_PLANTS = Path("data/redispatch/plants_2023.csv")
+SUBSTATIONS = Path("data/networks/desub/substations.csv")
 # Signals smaller than this are solver noise, not congestion.
 DEFAULT_THRESHOLD = 1e-6
 
@@ -335,6 +341,34 @@ def redispatch(
         f"(mean {hours.loc['signal', 'mean_redispatch_mwh']:,.0f} MWh per hour; hours "
         f"without a signal: {hours.loc['neutral', 'mean_redispatch_mwh']:,.0f}). Report in {out}"
     )
+
+
+@app.command("redispatch-plants")
+def redispatch_plants(
+    measures: Path = typer.Option(
+        ...,
+        "--redispatch",
+        help="CSV export of netztransparenz.de's redispatch page (docs/DATA.md).",
+    ),
+    plants: Path = typer.Option(
+        REDISPATCH_PLANTS, help="Table of the plants named in the export and their substation."
+    ),
+    substations: Path = typer.Option(SUBSTATIONS, help="Substation list of the network."),
+    all_reasons: bool = typer.Option(
+        False, "--all-reasons", help="Count all measures, not only current-driven redispatch."
+    ),
+) -> None:
+    """Share of the published redispatch whose plants are located on a substation."""
+    try:
+        table = read_plant_table(plants)
+        plant_locations(table, pd.read_csv(substations, comment="#"))
+        coverage = redispatch_coverage(
+            read_redispatch(measures), table, **({"reason": None} if all_reasons else {})
+        )
+    except (ValidationError, OSError, ValueError) as err:
+        typer.secho(f"Error: {err}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from err
+    typer.echo(render_coverage(coverage))
 
 
 @app.command()
