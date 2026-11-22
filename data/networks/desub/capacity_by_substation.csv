@@ -1,7 +1,9 @@
 # MW per substation and technology; the totals per technology are the plants'.
 # Source: plants_2023.csv (MaStR) and substations.csv of this directory.
 # ASSUMPTION: a plant feeds in at the substation nearest to its position, whatever
-# the voltage level; offshore wind at the one nearest to its position at sea.
+# the voltage level. Offshore wind feeds in where its cable ends
+# (data/plants/offshore_connections.csv); alpha ventus, whose substation is not in
+# the list, at the one nearest to its position at sea.
 # Built by scripts/place_plants.py; see docs/DATA.md.
 substation_id,technology,capacity_mw
 alfstedt,biomass,60.713
@@ -141,6 +143,7 @@ bentwisch,hard_coal,514.0
 bentwisch,hydro,0.084
 bentwisch,other_conventional,19.598
 bentwisch,solar,280.125
+bentwisch,wind_offshore,350.7
 bentwisch,wind_onshore,402.551
 bergmannsglueck,biomass,3.12
 bergmannsglueck,hard_coal,690.0
@@ -269,6 +272,7 @@ buescherhof,gas,8.81
 buettel,biomass,0.546
 buettel,gas,0.03
 buettel,solar,99.401
+buettel,wind_offshore,2134.8
 buettel,wind_onshore,66.411
 charlottenburg,gas,157.178
 charlottenburg,hard_coal,89.0
@@ -325,6 +329,7 @@ diele,biomass,45.371
 diele,gas,17.688
 diele,other_conventional,29.616
 diele,solar,147.158
+diele,wind_offshore,1240.1
 diele,wind_onshore,330.284
 dillenburg,biomass,21.514
 dillenburg,gas,6.912
@@ -349,6 +354,7 @@ doerpen-w,biomass,31.665
 doerpen-w,gas,0.507
 doerpen-w,other_conventional,0.326
 doerpen-w,solar,124.789
+doerpen-w,wind_offshore,2540.368
 doerpen-w,wind_onshore,357.6
 dollern,biomass,51.31
 dollern,gas,2.553
@@ -441,8 +447,9 @@ emden-borssum,gas,492.982
 emden-borssum,other_conventional,5.736
 emden-borssum,other_renewable,0.001
 emden-borssum,solar,205.786
-emden-borssum,wind_offshore,4875.718
+emden-borssum,wind_offshore,173.4
 emden-borssum,wind_onshore,1311.987
+emden-o,wind_offshore,921.85
 emscherbruch,biomass,0.179
 emscherbruch,gas,612.86
 emscherbruch,hard_coal,435.0
@@ -928,7 +935,7 @@ inhausen,biomass,16.739
 inhausen,gas,1.416
 inhausen,other_conventional,3.11
 inhausen,solar,66.426
-inhausen,wind_offshore,239.22
+inhausen,wind_offshore,110.7
 inhausen,wind_onshore,441.743
 irsching,biomass,2.578
 irsching,gas,1426.457
@@ -1015,7 +1022,6 @@ klixbuell-s,biomass,45.28
 klixbuell-s,gas,6.047
 klixbuell-s,other_conventional,1.037
 klixbuell-s,solar,206.799
-klixbuell-s,wind_offshore,2006.28
 klixbuell-s,wind_onshore,986.474
 klostermansfeld,biomass,44.139
 klostermansfeld,gas,21.763
@@ -1212,7 +1218,7 @@ lubmin,biomass,13.415
 lubmin,gas,75.239
 lubmin,other_conventional,3.523
 lubmin,solar,163.723
-lubmin,wind_offshore,744.1
+lubmin,wind_offshore,972.7
 lubmin,wind_onshore,107.975
 ludersheim,biomass,48.482
 ludersheim,gas,22.247
@@ -1234,7 +1240,6 @@ luedershagen,gas,17.588
 luedershagen,other_conventional,1.747
 luedershagen,other_renewable,0.33
 luedershagen,solar,339.186
-luedershagen,wind_offshore,579.3
 luedershagen,wind_onshore,262.692
 lueneburg,biomass,45.854
 lueneburg,gas,9.002
