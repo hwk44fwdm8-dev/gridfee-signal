@@ -1,0 +1,4 @@
+# ENTSO-E/ENTSOG TYNDP 2024 Matrix 2024, CC BY 4.0.
+# Reference only: replay maps hydrogen generators to gas, which has one cost.
+year,fuel,eur_per_gj,eur_per_mwh_th
+2030,Hydrogen (blue),17.64,63.504

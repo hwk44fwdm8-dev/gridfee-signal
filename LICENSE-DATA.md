@@ -1,5 +1,27 @@
 # Data licences
 
+## TYNDP 2024 replay inputs
+
+`data/costs/generation_costs_2030.csv`, `fuel_prices_2030.csv`,
+`hydrogen_price_2030.csv` and `data/tyndp/technology_mapping.csv` use ENTSO-E and
+ENTSOG, TYNDP 2024 Scenarios, National Trends 2030, licensed CC BY 4.0:
+https://2024.entsos-tyndp-scenarios.eu/download/ . Accessed 22 November 2026.
+Source downloads are hosted at https://2024-data.entsos-tyndp-scenarios.eu/files/ :
+
+- `scenarios-inputs/Prices.zip`: `2023 06 22 TYNDP 2024 Commodity prices Final.xlsx`,
+  sheet `Matrix 2024` (not the legacy `Overview 2024 cycle` sheet).
+- `scenarios-inputs/CO2-emission-factors-in-TYNDP2024-v2.xlsx.zip`: sheet
+  `CO2 emission factor`, column `NT2030`.
+- `scenarios-outputs/MMStandardOutputFile_NT2030_Plexos_CY2009_2.5_v40.xlsx.zip`:
+  technology labels in `Hourly Market Data`.
+
+Changes: EUR/GJ converted to EUR/MWh thermal by 3.6; kg/GJ converted to tonnes/MWh
+thermal by 0.0036; annual fuel prices repeated for twelve months; technologies
+aggregated to SMARD categories. Efficiencies and variable O&M are retained from
+`generation_costs_2023.csv` with its existing sources and assumptions (below), not
+claimed as TYNDP parameters. Hydrogen's separate price is reference-only after
+aggregation to gas. See `docs/TYNDP.md` for accounting and routing limitations.
+
 The code is under the MIT licence ([LICENSE](LICENSE)). Some data files are derived
 from open data with its own terms.
 
@@ -94,4 +116,3 @@ CC-BY 4.0, read from the ARCO-ERA5 copy on Google Cloud. Neither the European
 Commission nor ECMWF is responsible for any use made of it. The data was converted
 to capacity factors and averaged over zones; no ERA5 fields are included in this
 repository.
-
