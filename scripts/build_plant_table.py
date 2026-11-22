@@ -220,6 +220,12 @@ def main() -> None:
         raise SystemExit(
             f"{args.mastr} is not a finished extraction; run scripts/extract_mastr.py again"
         )
+    header = pd.read_csv(args.mastr / "EinheitenWind.csv", nrows=0).columns
+    if not {"Postleitzahl", "NameStromerzeugungseinheit", "Kraftwerksnummer"} <= set(header):
+        raise SystemExit(
+            f"{args.mastr} was extracted without the columns of the plant table; "
+            "run scripts/extract_mastr.py again into an empty directory"
+        )
     source = (args.mastr / "SOURCE.txt").read_text(encoding="utf-8").strip().rsplit("/", 1)[-1]
 
     units, reference = select_units(args.mastr, args.date, DE22, SHARES)
