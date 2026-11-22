@@ -2,8 +2,9 @@
 
 netztransparenz.de names the plant of every redispatch measure, not its place in the
 grid. ``data/redispatch/plants_2023.csv`` lists every name of the 2023 export with how
-it was located: by the plant list entries it stands for, by the substation, the
-landing point or the substation code its name gives, or not at all, with the reason.
+it was located: by the plant list entries it stands for, by a connection point from
+another source, by the substation, the landing point or the substation code its name
+gives, or not at all, with the reason.
 :func:`locate_plants` turns the plant list entries into a ``substation_id``.
 """
 
@@ -22,9 +23,18 @@ PLANT_LIST = "plant_list"
 SAME_SITE = "same_site"
 SUBSTATION_NAME = "substation_name"
 LANDING_POINT = "landing_point"
+CONNECTION_POINT = "connection_point"
 CLUSTER_CODE = "cluster_code"
 NOT_LOCATED = "none"
-LOCATED_BY = (PLANT_LIST, SAME_SITE, SUBSTATION_NAME, LANDING_POINT, CLUSTER_CODE, NOT_LOCATED)
+LOCATED_BY = (
+    PLANT_LIST,
+    SAME_SITE,
+    CONNECTION_POINT,
+    SUBSTATION_NAME,
+    LANDING_POINT,
+    CLUSTER_CODE,
+    NOT_LOCATED,
+)
 COLUMNS = [
     "plant",
     "located_by",
@@ -115,7 +125,7 @@ def locate_plants(
                 "basis": basis,
                 "distance_km": round(float(distance[place]), 1),
             }
-        elif row["located_by"] in (SUBSTATION_NAME, LANDING_POINT, CLUSTER_CODE):
+        elif row["located_by"] in (CONNECTION_POINT, SUBSTATION_NAME, LANDING_POINT, CLUSTER_CODE):
             if row["substation_id"] not in known:
                 raise ValidationError(f"{row['plant']}: unknown substation {row['substation_id']}")
             row |= {"basis": "name", "distance_km": np.nan}

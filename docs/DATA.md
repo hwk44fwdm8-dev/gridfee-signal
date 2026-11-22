@@ -449,7 +449,7 @@ the substation of `data/networks/desub/substations.csv` they stand at, so that
 redispatch can be summed per substation, NUTS2 region or reporting zone
 (`gridfee.validation.hourly_redispatch_by_location`). The rows are kept by hand;
 `scripts/build_redispatch_plants.py` fills in the substations and has to be rerun
-when the substation list changes. A name is located in one of five ways
+when the substation list changes. A name is located in one of six ways
 (`located_by`):
 
 - `plant_list`: the name is a plant or block of the list of conventional power plants
@@ -460,6 +460,9 @@ when the substation list changes. A name is located in one of five ways
   substation (`nearest`); `distance_km` is the distance. Tee points are not used.
 - `same_site` (**ASSUMPTION**): a unit the 2020 list lacks (Herne 6, Irsching 6 and
   five more), put at the listed units of the same power station.
+- `connection_point`: the connection point from another source, where it differs
+  from the plant list's (`note`). One plant, `Wilhelmshaven (ENGIE)`, at Fedderwarden
+  (see the checks below).
 - `substation_name`: the name gives the substation (`OWP UW Büttel`,
   `SHN Cluster Heide West`, `50H UW Bertikow`).
 - `landing_point`: seven offshore wind farms named without their substation, put at
@@ -478,8 +481,9 @@ lowered, 31 December 2022 to 1 January 2024), from
 
 | located_by | reason | plant names | GWh | share |
 | --- | --- | --- | --- | --- |
-| plant_list | | 146 | 11,914 | 59.1 % |
+| plant_list | | 145 | 11,686 | 57.9 % |
 | same_site | | 6 | 196 | 1.0 % |
+| connection_point | | 1 | 229 | 1.1 % |
 | substation_name | | 28 | 6,000 | 29.8 % |
 | landing_point | | 7 | 435 | 2.2 % |
 | cluster_code | | 30 | 621 | 3.1 % |
@@ -547,16 +551,52 @@ Checks against the TSOs' own publications (November 2026):
   Emden/Ost since (the NEP of June 2023 still has Emden/Borßum). The table keeps
   Emden/Borssum, where 96 % of the wind farm's 2023 redispatch energy falls
   (January to March).
-- Not checked against a TSO source: the plants of Amprion, TransnetBW and TenneT on
-  land. No publication of theirs with the connection point of each plant was looked
-  for; their substations rest on the plant list alone.
+- **TenneT, register of power plant connections** (Kraftwerksanschlussregister nach
+  § 9 KraftNAV, 18 February 2020,
+  <https://netztransparenz.tennet.eu/fileadmin/user_upload/The_Electricity_Market/German_Market/Grid_customers/kraftnav/2020-02_18_TTG_7555_KW-Register.pdf>):
+  plants of 100 MW and more with their connection point (`Netzanschlusspunkt (UW)`).
+  It names the substation of the table for Staudinger 4 and 5 (Großkrotzenburg),
+  Irsching 3 to 5, Zolling 5, Farge, Mehrum, Waldeck 2 (the table's Waldeck 5 and 6),
+  Erzhausen, Ingolstadt 3 and 4 and Robert Frank 4 (Landesbergen): 18 plant names,
+  1,252 GWh of the 2023 current-driven redispatch. Two rows differ:
+  - Heyden: `UW Heyden/KW`, the plant's own station, which is not in the substation
+    list. The table keeps Ovenstädt (4.4 km), which the plant list names.
+  - `Wilhelmshaven (ENGIE)` (229 GWh): 380 kV, `Raum Wilhelmshaven-Maade`. The plant
+    list names Maade, which has 220 kV only in the substation list. The plan approval
+    of 20 December 2018 (NLStBV) is for a "380-kV-Kraftwerksanschlussleitung zum
+    geplanten Umspannwerk Fedderwarden", and TenneT's project page
+    (<https://www.tennet.eu/de/projekte/wilhelmshaven2-conneforde>) has the 380 kV
+    line Fedderwarden - Conneforde in operation since 2020. The table moved the plant
+    from Maade to Fedderwarden (5 km, same reporting zone and NUTS2 region); no TSO
+    publication states the plant's connection point in 2023 in so many words.
+
+  The other TenneT plants of the table (71 GWh) feed 110 kV grids and are not in the
+  register.
+- **TransnetBW, grid schema 380/220 kV** (7 December 2020,
+  <https://www.transnetbw.de/_Resources/Persistent/8/d/9/0/8d90dc90194057e956680d90f440ae825f6d9240/Netzschema_Veroeffentlichung-CWE.pdf>):
+  shows a generator symbol, without the plant's name, at Daxlanden (380 kV, and
+  220 kV on the bar drawn as KA West), Großkraftwerk Mannheim, Großgartach, Altbach,
+  Marbach and Kühmoos, where the table has the 380 and 220 kV plants instructed by
+  TransnetBW (Rheinhafen-Dampfkraftwerk 4, 7 and 8, Mannheim, Heilbronn 7,
+  Altbach/Deizisau 1 and 2, Marbach DT 3, Säckingen): 12 plant names, 2,846 GWh.
+  This is agreement by position, read off by eye. The substation list has two
+  stations at Mannheim (`gkm`, `gkmb`); the schema has one, and the table uses
+  `gkmb`, the one mapped at the plant. TransnetBW publishes no register of
+  connection points; the other 15 plant names (185 GWh) feed 110 kV grids.
+- **Amprion and 50Hertz** publish no list of the plants' connection points (looked
+  for: a register after § 9 KraftNAV, the static grid models, the pages on grid
+  connection). Amprion's grid overview of 31 March 2026
+  (<https://www.amprion.net/Dokumente/Strommarkt/Engpassmanagement/Statisches-Netzmodell/2026/Statisches-Netzmodell-31.03.2026.pdf>)
+  names the stations, not what is connected to them. The onshore plants instructed
+  by Amprion (70 plant names, 5,279 GWh) and by 50Hertz (39, 2,029 GWh) therefore
+  rest on the plant list alone, apart from the 50Hertz map above.
 
 Limits of the table:
 
-- Of the year's energy, 50.5 % is placed by the connection point of the plant list,
-  35.0 % by name and 9.6 % at the nearest substation. Plants on the 110 kV grid of a
+- Of the year's energy, 49.4 % is placed by the connection point of the plant list,
+  36.1 % by name or another source and 9.6 % at the nearest substation. Plants on the 110 kV grid of a
   distribution system operator have no substation of their own in the list; the
-  nearest one is an approximation. 41 % of the year's energy lies within 5 km of its
+  nearest one is an approximation. 40 % of the year's energy lies within 5 km of its
   substation, 16 % between 5 and 10 km, 3 % further away (up to 40 km for UPM
   Schongau).
 - The matches of names to plant list entries were made by hand. Positions and

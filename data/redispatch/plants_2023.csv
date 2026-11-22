@@ -8,6 +8,8 @@
 #                    primary data: BNetzA Kraftwerksliste), matched by name and block
 #   same_site        ASSUMPTION: a unit the plant list lacks, put at the listed units
 #                    of the same power station (note)
+#   connection_point the plant's connection point from a source other than the plant
+#                    list, where the two differ (note)
 #   substation_name  the name gives a substation of the list
 #   landing_point    offshore wind farm, at the grid connection point of its
 #                    connection in the Netzentwicklungsplan (note)
@@ -303,7 +305,7 @@ WEISWEILER_G,plant_list,BNA1027,oberzier,network_node,10.2,,
 WEISWEILER_H,plant_list,BNA1028,oberzier,network_node,10.2,,
 WEISWEILER_VGTG3,plant_list,BNA1023,oberzier,nearest,10.2,,
 WEISWEILERVGT_H3,plant_list,BNA1024,oberzier,nearest,10.2,,
-Wilhelmshaven (ENGIE),plant_list,BNA1674,maade,network_node,2.1,,
+Wilhelmshaven (ENGIE),connection_point,BNA1674,fedderwarden,name,,,"380 kV plant; the plant list names Maade, which has no 380 kV in the substation list. NLStBV, plan approval of 20.12.2018: 380 kV connection line of the power plant to substation Fedderwarden; TenneT: Fedderwarden - Conneforde 380 kV in operation since 2020"
 Wolfsburg Nord A,plant_list,BNA1075b,hattorf,nearest,7.5,,generator A (BNA1075a) has coordinates in Kassel in the plant list; position of generator B of the same plant
 Wolfsburg West 2,plant_list,BNA1076b,hattorf,nearest,8.3,,
 WP Emsland,none,,,,,area,

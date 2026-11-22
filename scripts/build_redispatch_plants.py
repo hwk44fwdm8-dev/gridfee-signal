@@ -46,6 +46,8 @@ HEADER = """\
 #                    primary data: BNetzA Kraftwerksliste), matched by name and block
 #   same_site        ASSUMPTION: a unit the plant list lacks, put at the listed units
 #                    of the same power station (note)
+#   connection_point the plant's connection point from a source other than the plant
+#                    list, where the two differ (note)
 #   substation_name  the name gives a substation of the list
 #   landing_point    offshore wind farm, at the grid connection point of its
 #                    connection in the Netzentwicklungsplan (note)
