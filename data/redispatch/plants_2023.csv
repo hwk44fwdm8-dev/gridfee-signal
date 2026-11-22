@@ -9,13 +9,15 @@
 #   same_site        ASSUMPTION: a unit the plant list lacks, put at the listed units
 #                    of the same power station (note)
 #   substation_name  the name gives a substation of the list
-#   landing_point    ASSUMPTION: offshore wind farm, at the substation where its grid
-#                    connection comes ashore; from general knowledge of the grid
-#                    connections, not checked against a TSO document
+#   landing_point    offshore wind farm, at the substation where its grid connection
+#                    comes ashore; note gives the TSO's statement, or ASSUMPTION
+#   cluster_code     ASSUMPTION: 50Hertz's code for a group of renewable plants in a
+#                    distribution grid (50H_<grid operator>_CR_<code>), read as the
+#                    short name of a substation in 50Hertz's static grid model (note)
 #   none             not located. reason: market (exchange trades), area (a federal
 #                    state, a distribution grid area or a pool), cluster_code
-#                    (50Hertz's codes for groups of renewable plants, whose key is not
-#                    published), abroad (plants in Austria), not_in_plant_list (in
+#                    (a code that is no short name of the static grid model),
+#                    abroad (plants in Austria), not_in_plant_list (in
 #                    operation after 2020), not_identified, substation_not_in_list,
 #                    ambiguous (note)
 # basis: network_node = the substation the plant list names as the plant's connection
@@ -40,11 +42,11 @@ plant,located_by,plant_list_ids,substation_id,basis,distance_km,reason,note
 50H Hamburg Wedel1 Block1,plant_list,BNA0404,kummerfeld,nearest,14.2,,
 50H InfraLeuna IKW,plant_list,BNA0593 BNA0594 BNA0595 BNA0598b,lauchstaedt,nearest,14.7,,
 50H Neubrandenburg GuD,plant_list,BNA0688,altentreptow-sued,nearest,9.6,,
-50H OWP Arcadis Ost 1,landing_point,,lubmin,name,,,
-50H OWP Arkona,landing_point,,lubmin,name,,,
-50H OWP Baltic 1+2 Süd MIO,landing_point,,bentwisch,name,,,
-50H OWP MIO Baltic 1+2,landing_point,,bentwisch,name,,,
-50H OWP Wikinger,landing_point,,lubmin,name,,,
+50H OWP Arcadis Ost 1,landing_point,,lubmin,name,,,"50Hertz, project Ostwind 2: connection point on land Umspannwerk Lubmin"
+50H OWP Arkona,landing_point,,lubmin,name,,,"50Hertz, project Ostwind 1: connection point on land Umspannwerk Lubmin"
+50H OWP Baltic 1+2 Süd MIO,landing_point,,bentwisch,name,,,ASSUMPTION: Bentwisch; 50Hertz's grid map shows the two wind farms at the 380/150 kV substation near Rostock without naming it
+50H OWP MIO Baltic 1+2,landing_point,,bentwisch,name,,,ASSUMPTION: Bentwisch; 50Hertz's grid map shows the two wind farms at the 380/150 kV substation near Rostock without naming it
+50H OWP Wikinger,landing_point,,lubmin,name,,,"50Hertz, project Ostwind 1: connection point on land Umspannwerk Lubmin"
 50H Rostock Marienehe,plant_list,BNA0848,bentwisch,nearest,8.8,,
 50H Stralsund BHKW+P2H,none,,,,,not_in_plant_list,
 50H UW Altentreptow,none,,,,,ambiguous,
@@ -54,39 +56,39 @@ plant,located_by,plant_list_ids,substation_id,basis,distance_km,reason,note
 50H UW Schönewalde,substation_name,,schoenewalde,name,,,
 50H UW Wessin,substation_name,,wessin,name,,,
 50H UW Wustermark,substation_name,,wustermark,name,,,
-50H_AVA_CR_FOE,none,,,,,cluster_code,
-50H_AVA_CR_STW,none,,,,,cluster_code,
-50H_AVA_CR_WOL,none,,,,,cluster_code,
-50H_EDIS_CR_ATS,none,,,,,cluster_code,
-50H_EDIS_CR_EH,none,,,,,cluster_code,
-50H_EDIS_CR_NHG_Nord,none,,,,,cluster_code,
-50H_EDIS_CR_PAS,none,,,,,cluster_code,
-50H_EDIS_CR_PE,none,,,,,cluster_code,
-50H_EDIS_CR_SOW_Sued,none,,,,,cluster_code,
-50H_MNS_CR_ADB,none,,,,,cluster_code,
-50H_MNS_CR_FRN,none,,,,,cluster_code,
-50H_MNS_CR_GRS,none,,,,,cluster_code,
-50H_MNS_CR_HER,none,,,,,cluster_code,
-50H_MNS_CR_JEN,none,,,,,cluster_code,
-50H_MNS_CR_JSN,none,,,,,cluster_code,
-50H_MNS_CR_KLM,none,,,,,cluster_code,
-50H_MNS_CR_LAU_Nord,none,,,,,cluster_code,
-50H_MNS_CR_LAU_Sued,none,,,,,cluster_code,
-50H_MNS_CR_MA_Nord,none,,,,,cluster_code,
-50H_MNS_CR_MA_Sued,none,,,,,cluster_code,
-50H_MNS_CR_PRL,none,,,,,cluster_code,
-50H_MNS_CR_PRL_TU,none,,,,,cluster_code,
-50H_MNS_CR_PUL,none,,,,,cluster_code,
-50H_MNS_CR_RAG,none,,,,,cluster_code,
-50H_MNS_CR_ROE,none,,,,,cluster_code,
-50H_MNS_CR_STR,none,,,,,cluster_code,
-50H_MNS_CR_ZW,none,,,,,cluster_code,
-50H_TEN_CR_M1_EI,none,,,,,cluster_code,
-50H_TEN_CR_M2_VIB,none,,,,,cluster_code,
-50H_TEN_CR_S1_ATF,none,,,,,cluster_code,
-50H_TEN_CR_S2_WD,none,,,,,cluster_code,
-50H_WEMA_CR_GOE,none,,,,,cluster_code,
-50H_WEMA_CR_PMS,none,,,,,cluster_code,
+50H_AVA_CR_FOE,cluster_code,,foerderstedt,name,,,FOE: short name D8FOE of Foerderstedt in 50Hertz's static grid model
+50H_AVA_CR_STW,cluster_code,,stendal-west,name,,,STW: short name D8STW of Stendal/West in 50Hertz's static grid model
+50H_AVA_CR_WOL,cluster_code,,wolmirstedt,name,,,WOL: short name D8WOL of Wolmirstedt in 50Hertz's static grid model
+50H_EDIS_CR_ATS,cluster_code,,altentreptow-sued,name,,,ATS: short name D8ATS of Altentreptow/Sued in 50Hertz's static grid model
+50H_EDIS_CR_EH,cluster_code,,eisenhuettenstadt,name,,,EH: short name D8EH of Eisenhuettenstadt in 50Hertz's static grid model
+50H_EDIS_CR_NHG_Nord,cluster_code,,neuenhagen,name,,,NHG: short name D8NHG of Neuenhagen in 50Hertz's static grid model
+50H_EDIS_CR_PAS,cluster_code,,pasewalk,name,,,PAS: short name D8PAS of Pasewalk in 50Hertz's static grid model
+50H_EDIS_CR_PE,cluster_code,,perleberg,name,,,PE: short name D8PE of Perleberg in 50Hertz's static grid model
+50H_EDIS_CR_SOW_Sued,cluster_code,,siedenbruenzow,name,,,SOW: short name D8SOW of Siedenbruenzow in 50Hertz's static grid model
+50H_MNS_CR_ADB,cluster_code,,altdoebern,name,,,ADB: short name D8ADB of Altdoebern in 50Hertz's static grid model
+50H_MNS_CR_FRN,cluster_code,,freiberg-nord,name,,,FRN: short name D8FRN of Freiberg/Nord in 50Hertz's static grid model
+50H_MNS_CR_GRS,cluster_code,,graustein,name,,,GRS: short name D8GRS of Graustein in 50Hertz's static grid model
+50H_MNS_CR_HER,none,,,,,cluster_code,HER is not a short name of 50Hertz's static grid model
+50H_MNS_CR_JEN,none,,,,,cluster_code,JEN is not a short name of 50Hertz's static grid model
+50H_MNS_CR_JSN,cluster_code,,jessen-nord,name,,,JSN: short name D8JSN of Jessen/Nord in 50Hertz's static grid model
+50H_MNS_CR_KLM,cluster_code,,klostermansfeld,name,,,KLM: short name D8KLM of Klostermansfeld in 50Hertz's static grid model
+50H_MNS_CR_LAU_Nord,cluster_code,,lauchstaedt,name,,,LAU: short name D8LAU of Lauchstaedt in 50Hertz's static grid model
+50H_MNS_CR_LAU_Sued,cluster_code,,lauchstaedt,name,,,LAU: short name D8LAU of Lauchstaedt in 50Hertz's static grid model
+50H_MNS_CR_MA_Nord,cluster_code,,marke,name,,,MA: short name D8MA of Marke in 50Hertz's static grid model
+50H_MNS_CR_MA_Sued,cluster_code,,marke,name,,,MA: short name D8MA of Marke in 50Hertz's static grid model
+50H_MNS_CR_PRL,cluster_code,,preilack,name,,,PRL: short name D8PRL of Preilack in 50Hertz's static grid model
+50H_MNS_CR_PRL_TU,cluster_code,,preilack,name,,,PRL: short name D8PRL of Preilack in 50Hertz's static grid model
+50H_MNS_CR_PUL,cluster_code,,pulgar,name,,,PUL: short name D8PUL of Pulgar in 50Hertz's static grid model
+50H_MNS_CR_RAG,cluster_code,,ragow,name,,,RAG: short name D8RAG of Ragow in 50Hertz's static grid model
+50H_MNS_CR_ROE,cluster_code,,roehrsdorf,name,,,ROE: short name D8ROE of Roehrsdorf in 50Hertz's static grid model
+50H_MNS_CR_STR,cluster_code,,streumen,name,,,STR: short name D8STR of Streumen in 50Hertz's static grid model
+50H_MNS_CR_ZW,none,,,,,cluster_code,ZW is not a short name of 50Hertz's static grid model
+50H_TEN_CR_M1_EI,cluster_code,,eisenach,name,,,EI: short name D8EI of Eisenach in 50Hertz's static grid model
+50H_TEN_CR_M2_VIB,cluster_code,,vieselbach,name,,,VIB: short name D8VIB of Vieselbach in 50Hertz's static grid model
+50H_TEN_CR_S1_ATF,cluster_code,,altenfeld,name,,,ATF: short name D8ATF of Altenfeld in 50Hertz's static grid model
+50H_TEN_CR_S2_WD,cluster_code,,weida,name,,,WD: short name D8WD of Weida in 50Hertz's static grid model
+50H_WEMA_CR_GOE,cluster_code,,goerries,name,,,GOE: short name D8GOE of Goerries in 50Hertz's static grid model
+50H_WEMA_CR_PMS,cluster_code,,parchim-sued,name,,,PMS: short name D8PMS of Parchim/Sued in 50Hertz's static grid model
 Ahrensfelde A (KapRes),plant_list,BNA0005,malchow,network_node,4.2,,
 Ahrensfelde B (KapRes),plant_list,BNA0006,malchow,network_node,4.2,,
 Ahrensfelde C (KapRes),plant_list,BNA0007,malchow,network_node,4.2,,
@@ -215,8 +217,8 @@ Niederrad 1,plant_list,BNA0285,frankfurt-sw,nearest,1.0,,
 NIEHL-31-GUD,plant_list,BNA1818,duennwald,nearest,3.7,,
 NIEHL-II,plant_list,BNA0545,duennwald,nearest,3.7,,
 NIEHL-II-GT,plant_list,BNA0545,duennwald,nearest,3.7,,
-OWP Nordergründe,landing_point,,inhausen,name,,,
-OWP Riffgat,landing_point,,emden-borssum,name,,,
+OWP Nordergründe,landing_point,,inhausen,name,,,"ASSUMPTION: Inhausen, from general knowledge; TenneT's project page names no substation"
+OWP Riffgat,landing_point,,emden-borssum,name,,,"TenneT, project Riffgat: Umspannwerk Emden/Borssum until spring 2023, Emden/Ost since; 96 % of the 2023 energy falls in January to March"
 OWP UW Büttel,substation_name,,buettel,name,,,
 OWP UW Diele,substation_name,,diele,name,,,
 OWP UW Dörpen-West,substation_name,,doerpen-w,name,,,

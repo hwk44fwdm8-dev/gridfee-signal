@@ -47,13 +47,15 @@ HEADER = """\
 #   same_site        ASSUMPTION: a unit the plant list lacks, put at the listed units
 #                    of the same power station (note)
 #   substation_name  the name gives a substation of the list
-#   landing_point    ASSUMPTION: offshore wind farm, at the substation where its grid
-#                    connection comes ashore; from general knowledge of the grid
-#                    connections, not checked against a TSO document
+#   landing_point    offshore wind farm, at the substation where its grid connection
+#                    comes ashore; note gives the TSO's statement, or ASSUMPTION
+#   cluster_code     ASSUMPTION: 50Hertz's code for a group of renewable plants in a
+#                    distribution grid (50H_<grid operator>_CR_<code>), read as the
+#                    short name of a substation in 50Hertz's static grid model (note)
 #   none             not located. reason: market (exchange trades), area (a federal
 #                    state, a distribution grid area or a pool), cluster_code
-#                    (50Hertz's codes for groups of renewable plants, whose key is not
-#                    published), abroad (plants in Austria), not_in_plant_list (in
+#                    (a code that is no short name of the static grid model),
+#                    abroad (plants in Austria), not_in_plant_list (in
 #                    operation after 2020), not_identified, substation_not_in_list,
 #                    ambiguous (note)
 # basis: network_node = the substation the plant list names as the plant's connection

@@ -129,7 +129,7 @@ def test_committed_table():
     table = read_plant_table(TABLE)
     substations = pd.read_csv(DATA / "networks" / "desub" / "substations.csv", comment="#")
     places = plant_locations(table, substations)
-    assert len(table) == 286 and len(places) == 212
+    assert len(table) == 286 and len(places) == 242
     assert places.notna().all().all()
     kind = substations.set_index("substation_id")["kind"]
     assert (kind[places["substation_id"]] == "substation").all()
@@ -138,7 +138,10 @@ def test_committed_table():
     assert table.loc[by_list, "basis"].isin(["network_node", "nearest"]).all()
     assert table.loc[by_list, "distance_km"].between(0, 40).all()
     assert (table.loc[~by_list & (table["located_by"] != "none"), "basis"] == "name").all()
-    assert table.loc[table["located_by"] == "same_site", "note"].ne("").all()
+    assumed = table["located_by"].isin(["same_site", "landing_point", "cluster_code"])
+    assert table.loc[assumed, "note"].ne("").all()
+    # A cluster code is the short name of a substation of the grid operator's area.
+    assert places.loc["50H_AVA_CR_WOL"].tolist() == ["wolmirstedt", "DE05", "DEE0"]
     # Offshore wind that lands at Buettel is in Schleswig-Holstein's zone.
     assert places.loc["OWP UW Büttel", "report_zone"] == "DE07"
 

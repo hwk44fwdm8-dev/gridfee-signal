@@ -449,7 +449,7 @@ the substation of `data/networks/desub/substations.csv` they stand at, so that
 redispatch can be summed per substation, NUTS2 region or reporting zone
 (`gridfee.validation.hourly_redispatch_by_location`). The rows are kept by hand;
 `scripts/build_redispatch_plants.py` fills in the substations and has to be rerun
-when the substation list changes. A name is located in one of four ways
+when the substation list changes. A name is located in one of five ways
 (`located_by`):
 
 - `plant_list`: the name is a plant or block of the list of conventional power plants
@@ -462,10 +462,16 @@ when the substation list changes. A name is located in one of four ways
   five more), put at the listed units of the same power station.
 - `substation_name`: the name gives the substation (`OWP UW Büttel`,
   `SHN Cluster Heide West`, `50H UW Bertikow`).
-- `landing_point` (**ASSUMPTION**): seven offshore wind farms named without their
-  substation, put where their grid connection comes ashore (Lubmin, Bentwisch,
-  Inhausen, Emden/Borssum), from general knowledge and not checked against a TSO
-  document.
+- `landing_point`: seven offshore wind farms named without their substation, put
+  where their grid connection comes ashore. The TSO states it for four (Arkona,
+  Wikinger and Arcadis Ost 1 at Lubmin, Riffgat at Emden/Borssum); for Baltic 1 and 2
+  (Bentwisch) and Nordergründe (Inhausen) it is an **ASSUMPTION**, see `note`.
+- `cluster_code` (**ASSUMPTION**): 50Hertz's groups of renewable plants in a
+  distribution grid (`50H_MNS_CR_LAU_Nord`). The last part of 30 of the 33 codes is
+  the short name of a substation in 50Hertz's static grid model (`D8LAU`,
+  Lauchstädt), and each of these substations lies in a federal state of the grid
+  operator the code names (Avacon, E.DIS, Mitnetz Strom, TEN, WEMAG). 50Hertz does
+  not publish what the codes mean.
 
 Share of the current-driven redispatch of the 2023 export (20,166 GWh, raised plus
 lowered, 31 December 2022 to 1 January 2024), from
@@ -477,19 +483,16 @@ lowered, 31 December 2022 to 1 January 2024), from
 | same_site | | 6 | 196 | 1.0 % |
 | substation_name | | 28 | 6,000 | 29.8 % |
 | landing_point | | 7 | 435 | 2.2 % |
-| **located** | | **187** | **18,546** | **92.0 %** |
-| none | cluster_code | 33 | 627 | 3.1 % |
+| cluster_code | | 30 | 621 | 3.1 % |
+| **located** | | **217** | **19,166** | **95.0 %** |
 | none | abroad | 7 | 533 | 2.6 % |
 | none | market | 1 | 256 | 1.3 % |
 | none | area | 14 | 143 | 0.7 % |
 | none | not_in_plant_list | 6 | 52 | 0.3 % |
-| none | ambiguous, substation_not_in_list, not_identified | 5 | 10 | 0.1 % |
+| none | cluster_code, ambiguous, substation_not_in_list, not_identified | 8 | 17 | 0.1 % |
 
 What is not located and what it would take:
 
-- `cluster_code`: 50Hertz's groups of renewable plants (`50H_MNS_CR_LAU_Nord`). The
-  codes look like abbreviations of substations, but no key is published; with
-  50Hertz's key they could be located.
 - `abroad`: Vorarlberger Illwerke (531 GWh, connected at Bürs in Austria) and the
   TIWAG plants Kühtai and Silz. They are outside the substation list.
 - `market`: `Börse`, trades on the exchange without a place. `area`: a federal state
@@ -497,23 +500,50 @@ What is not located and what it would take:
 - `not_in_plant_list`: plants built after 2020 on a site without a listed unit
   (Datteln 4, HKW Marzahn and four small ones); a newer plant list with positions
   would locate them.
+- `cluster_code`: `HER`, `JEN` and `ZW` are no short names of the static grid model.
 - `ambiguous`: `50H UW Altentreptow` (the list has Altentreptow/Nord and /Sued) and
   the Schluchsee group (three plants). `substation_not_in_list`: `50H UW Iven`.
 
+Checks against the TSOs' own publications (November 2026):
+
+- **50Hertz, redispatch per quarter-hour**
+  (<https://www.50hertz.com/de/Transparenz/Kennzahlen/Engpassmanagement>): sums for
+  the control area, one series for conventional plants and one for renewables and
+  clusters in distribution grids; no plants or places. For 2023 they agree with the
+  rows of the export that 50Hertz instructed: conventional plants raised 408 GWh
+  (export 407) and lowered 2,159 GWh (2,188); renewables and clusters lowered
+  1,572 GWh (1,340). Hourly correlation 0.93 to 0.98. This confirms which names are
+  plants and which are clusters, not where they are.
+- **50Hertz, static grid model** (data table 2025-Q4,
+  <https://www.50hertz.com/de/Transparenz/Kennzahlen/Netzdaten/StatischesNetzmodell>):
+  the short names behind `cluster_code`. Its map with generators shows power plant
+  and pumped storage symbols at the substations the table uses for Jänschwalde,
+  Schwarze Pumpe, Boxberg, Lippendorf, Schkopau, Rostock, Goldisthal and Hohenwarte,
+  and two offshore connections; the map names no substation, so this is agreement
+  by position, read off by eye.
+- **50Hertz, offshore projects** Ostwind 1 and Ostwind 2: "Anschlusspunkt an Land
+  Umspannwerk Lubmin" for Arkona, Wikinger and Arcadis Ost 1.
+- **TenneT, project Riffgat**: connected at Emden/Borssum until spring 2023, at
+  Emden/Ost since. The table keeps Emden/Borssum, where 96 % of the wind farm's
+  2023 redispatch energy falls (January to March). TenneT's page on Nordergründe
+  names no substation.
+- Not checked against a TSO source: the plants of Amprion, TransnetBW and TenneT on
+  land. No publication of theirs with the connection point of each plant was looked
+  for; their substations rest on the plant list alone.
+
 Limits of the table:
 
-- Of the located energy, 50.5 % of the year's total is placed by the connection point
-  of the plant list, 31.9 % by name and 9.6 % at the nearest substation. Plants on
-  the 110 kV grid of a distribution system operator have no substation of their own
-  in the list; the nearest one is an approximation. 41 % of the year's energy lies
-  within 5 km of its substation, 16 % between 5 and 10 km, 3 % further away (up to
-  40 km for UPM Schongau).
-- The matches of names to plant list entries were made by hand and not checked
-  against a second source. Positions and connection points are those of the 2020
-  list; one wrong position in it (Wolfsburg HKW Nord, generator A) is noted in the
-  table.
+- Of the year's energy, 50.5 % is placed by the connection point of the plant list,
+  35.0 % by name and 9.6 % at the nearest substation. Plants on the 110 kV grid of a
+  distribution system operator have no substation of their own in the list; the
+  nearest one is an approximation. 41 % of the year's energy lies within 5 km of its
+  substation, 16 % between 5 and 10 km, 3 % further away (up to 40 km for UPM
+  Schongau).
+- The matches of names to plant list entries were made by hand. Positions and
+  connection points are those of the 2020 list; one wrong position in it (Wolfsburg
+  HKW Nord, generator A) is noted in the table.
 - With all reasons counted (24,837 GWh, including countertrading, which is booked as
-  `Börse`), 78.9 % is located.
+  `Börse`), 81.5 % is located.
 
 The table holds the plant names of the export and the BNetzA numbers, no measures,
 energies, positions or other fields of either source.

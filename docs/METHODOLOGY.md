@@ -300,7 +300,7 @@ check cannot confirm the four lines themselves: redispatch is not published per 
 
 **By plant location.** The plants named in the export are located on the substations
 of the substation-level network (`data/redispatch/plants_2023.csv`, docs/DATA.md):
-92 % of the year's current-driven redispatch energy has a substation and with it a
+95 % of the year's current-driven redispatch energy has a substation and with it a
 NUTS2 region and a reporting zone. `gridfee.validation.hourly_redispatch_by_location`
 sums raised and lowered feed-in per hour at either level. The comparison of direction
 above is still per TSO zone; it can be made per substation or reporting zone once a
