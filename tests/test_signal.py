@@ -215,6 +215,14 @@ def test_aggregate_signal_rejects_bad_groups(zone_ids, weights, message):
         aggregate_signal(FeeSignal(signal, classify_signal(signal), 0.0), groups)
 
 
+def test_aggregate_signal_rejects_a_zone_without_reporting_zone():
+    signal = pd.DataFrame({"N1": [1.0], "N2": [2.0]}, index=pd.Index(["h1"]))
+    groups = pd.DataFrame({"zone_id": ["N1", "N2"], "report_zone": ["Z1", None], "weight": 1.0})
+    message = "lacks its zone or reporting zone"
+    with pytest.raises(SignalError, match=message):
+        aggregate_signal(FeeSignal(signal, classify_signal(signal), 0.0), groups)
+
+
 def test_write_signal_with_another_stem(tmp_path):
     result = compute_fee_signal(SHADOW, PTDF)
     paths = write_signal(result, tmp_path, stem="fee_signal_report")

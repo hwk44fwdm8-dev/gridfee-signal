@@ -100,6 +100,8 @@ def aggregate_signal(result: FeeSignal, groups: pd.DataFrame) -> FeeSignal:
     its zones is congested, their signals have opposite signs and the mean is
     closer to zero than either.
     """
+    if groups[["zone_id", "report_zone"]].isna().any().any():
+        raise SignalError("a row of the reporting groups lacks its zone or reporting zone")
     if groups["zone_id"].duplicated().any():
         raise SignalError("a zone is listed twice in the reporting groups")
     unknown = sorted(set(groups["zone_id"]) - set(result.signal.columns))
