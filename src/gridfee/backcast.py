@@ -16,15 +16,27 @@ What is observed and what is assumed:
   are PLACEHOLDERS equal to the zone's share of demand, i.e. generation is
   assumed to sit where the load is.
 
+  With one cost everywhere, producing on the other side of a full line is free, so
+  full lines get no shadow price and the fee signal stays neutral.
+- With ``generation_shares`` and ``generation_costs`` the national generation is
+  taken apart by fuel instead (SMARD's national series per fuel). A fuel with a cost
+  gets one generator per zone at that cost, with the zone's share of the year's
+  highest national output of the fuel as capacity; it is available between the
+  first and the last hour in which the fuel produced. A fuel without a cost
+  (biomass, hydro, ...) feeds in its observed national output, split by the zone's
+  share, at no cost and curtailable, like wind and solar.
+
 The backcast therefore shows congestion caused by wind, solar and cross-border
-flows that the lines cannot carry. It is not a market model.
+flows that the lines cannot carry. It is not a market model: plants are dispatched
+by one cost per fuel, without start-up costs, heat demand, outages or reserves.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 
@@ -93,6 +105,8 @@ def build_backcast_inputs(
     physical_flows_tso: pd.DataFrame,
     residual_cost: float = 1.0,
     residual_shares: pd.Series | None = None,
+    generation_shares: pd.DataFrame | None = None,
+    generation_costs: Mapping[str, float] | None = None,
 ) -> BackcastInputs:
     """Turn injections, national generation and cross-border flows into OPF inputs.
 
@@ -102,6 +116,15 @@ def build_backcast_inputs(
         and the fee signal scale with it.
     residual_shares: zone id -> share of the national residual capacity, summing
         to 1 over the internal zones. Default: placeholder, the share of demand.
+
+    generation_shares: fuels x zone ids, each zone's share of Germany's capacity of
+        the fuel (:func:`read_generation_shares`). With it the national generation
+        is modelled per fuel and ``residual_cost`` and ``residual_shares`` are not
+        used. Every fuel of ``generation_de`` other than wind and solar that
+        produced must be listed.
+    generation_costs: fuel -> marginal cost in EUR/MWh
+        (:func:`read_generation_costs`). Fuels of ``generation_shares`` without a
+        cost feed in their observed national output.
 
     Hours in which a cross-border series or the national generation is missing are
     left out and listed in ``skipped_hours``. ``clipped_exchange`` lists, per
@@ -146,8 +169,15 @@ def build_backcast_inputs(
     if not usable.any():
         raise BackcastError("no hour has complete cross-border flows and national generation")
 
-    placeholder = residual_shares is None
-    if placeholder:
+    by_fuel = generation_shares is not None
+    if generation_costs is not None and not by_fuel:
+        raise BackcastError("generation_costs need generation_shares")
+    placeholder = residual_shares is None and not by_fuel
+    if by_fuel:
+        residual_shares = _capacity_weighted_shares(
+            generation_shares, generation_de.drop(columns=res_fuels), internal
+        )
+    elif placeholder:
         annual = demand[internal].sum()
         residual_shares = annual / annual.sum()
         logger.warning(
@@ -184,15 +214,41 @@ def build_backcast_inputs(
             add_profile(tech, zone_id, frame.loc[usable, zone_id])
     for zone_id in exports.columns:
         add_profile(IMPORT, zone_id, (-exports.loc[usable, zone_id]).clip(lower=0.0))
-    # The year's peak, also when that hour itself is left out.
-    peak_residual = float(residual_de.max())
-    for zone_id in internal:
-        if residual_shares[zone_id] > 0:
-            rows[generator_id(RESIDUAL, zone_id)] = (
-                zone_id,
-                peak_residual * float(residual_shares[zone_id]),
-                residual_cost,
-            )
+    if by_fuel:
+        costs = {} if generation_costs is None else dict(generation_costs)
+        unknown = sorted(set(costs) - set(generation_shares.index))
+        if unknown:
+            raise BackcastError(f"generation_costs for fuels without shares: {unknown}")
+        if any(not cost >= 0 for cost in costs.values()):
+            raise BackcastError("generation_costs must be >= 0")
+        for fuel in generation_de.columns.difference(res_fuels):
+            national = generation_de[fuel]
+            if not national.max() > 0:
+                continue
+            share = generation_shares.loc[fuel]
+            if fuel not in costs:
+                for zone_id in internal:
+                    add_profile(fuel, zone_id, national[usable] * float(share[zone_id]))
+                continue
+            produced = national.index[national > 0]
+            window = (hours[usable] >= produced[0]) & (hours[usable] <= produced[-1])
+            for zone_id in internal:
+                if share[zone_id] > 0:
+                    name = generator_id(fuel, zone_id)
+                    # The year's peak, also when that hour itself is left out.
+                    rows[name] = (zone_id, float(national.max() * share[zone_id]), costs[fuel])
+                    if not window.all():
+                        availability[name] = pd.Series(window.astype(float), index=hours[usable])
+    else:
+        # The year's peak, also when that hour itself is left out.
+        peak_residual = float(residual_de.max())
+        for zone_id in internal:
+            if residual_shares[zone_id] > 0:
+                rows[generator_id(RESIDUAL, zone_id)] = (
+                    zone_id,
+                    peak_residual * float(residual_shares[zone_id]),
+                    residual_cost,
+                )
 
     generators = pd.DataFrame.from_dict(
         rows, orient="index", columns=["zone", "p_nom_mw", "marginal_cost_eur_per_mwh"]
@@ -208,6 +264,65 @@ def build_backcast_inputs(
         clipped_exchange=clipped,
         ptdf_reference={zone_id: float(reference[zone_id]) for zone_id in internal},
     )
+
+
+def _capacity_weighted_shares(
+    generation_shares: pd.DataFrame, generation_de: pd.DataFrame, internal: Sequence[str]
+) -> pd.Series:
+    """Check the fuel shares; return each zone's share of all fuels, by annual energy."""
+    produced = [fuel for fuel in generation_de.columns if generation_de[fuel].max() > 0]
+    missing = sorted(set(produced) - set(generation_shares.index))
+    if missing:
+        raise BackcastError(f"generation_shares lack the fuels {missing}")
+    if set(generation_shares.columns) != set(internal):
+        raise BackcastError("generation_shares must list every internal zone for every fuel")
+    shares = generation_shares.loc[produced, list(internal)].astype(float)
+    if shares.isna().any().any() or (shares < 0).any().any():
+        raise BackcastError("generation_shares must be >= 0 and not missing")
+    if ((shares.sum(axis=1) - 1).abs() > _SHARE_SUM_TOLERANCE).any():
+        raise BackcastError("generation_shares must sum to 1 for every fuel")
+    energy = generation_de[produced].sum()
+    return shares.mul(energy / energy.sum(), axis=0).sum()
+
+
+def read_generation_shares(path: str | Path) -> pd.DataFrame:
+    """Read ``technology,zone_id,share`` into fuels x zone ids (missing pairs are 0)."""
+    frame = pd.read_csv(path, comment="#", dtype={"zone_id": str, "technology": str})
+    missing = {"technology", "zone_id", "share"} - set(frame.columns)
+    if missing:
+        raise BackcastError(f"{path}: missing columns {sorted(missing)}")
+    if frame.duplicated(["technology", "zone_id"]).any():
+        raise BackcastError(f"{path}: a technology and zone is listed more than once")
+    if frame["share"].isna().any():
+        raise BackcastError(f"{path}: rows without a share")
+    return frame.pivot(index="technology", columns="zone_id", values="share").fillna(0.0)
+
+
+def read_generation_costs(path: str | Path) -> pd.Series:
+    """Marginal cost per technology in EUR/MWh of electricity from a cost file.
+
+    cost = (fuel + co2_price x co2_intensity) / efficiency + vom
+    """
+    columns = [
+        "fuel_eur_per_mwh_th",
+        "efficiency",
+        "co2_t_per_mwh_th",
+        "vom_eur_per_mwh",
+        "co2_price_eur_per_t",
+    ]
+    frame = pd.read_csv(path, comment="#", dtype={"technology": str})
+    missing = {"technology", *columns} - set(frame.columns)
+    if missing:
+        raise BackcastError(f"{path}: missing columns {sorted(missing)}")
+    if frame["technology"].duplicated().any():
+        raise BackcastError(f"{path}: a technology is listed more than once")
+    values = frame.set_index("technology")[columns].astype(float)
+    if values.isna().any().any() or (values < 0).any().any() or (values["efficiency"] <= 0).any():
+        raise BackcastError(f"{path}: values must be >= 0, efficiency > 0, none missing")
+    heat = (
+        values["fuel_eur_per_mwh_th"] + values["co2_price_eur_per_t"] * values["co2_t_per_mwh_th"]
+    )
+    return (heat / values["efficiency"] + values["vom_eur_per_mwh"]).rename("cost_eur_per_mwh")
 
 
 def _clip_to_line_capacity(

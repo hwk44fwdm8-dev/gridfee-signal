@@ -1,0 +1,21 @@
+# Cost of generating one MWh of electricity per technology, 2023 (ASSUMPTION built from
+# the sources below; see docs/DATA.md). `gridfee backcast --generation-costs` reads it.
+#   cost = (fuel + co2_price x co2_intensity) / efficiency + vom     [EUR/MWh of electricity]
+# fuel_eur_per_mwh_th: fuel price per MWh of heat
+#   hard_coal: 213 EUR/t SKE, border price of power plant coal 2023 (Verein der
+#     Kohlenimporteure, Jahresbericht 2024, "Importkohlemarkt auf einen Blick"); 1 t SKE = 8.141 MWh
+#   gas: 11,670 EUR/TJ, border price of natural gas 2023, as quoted in "Monitoring der
+#     Energiewende in Baden-Wuerttemberg, Statusbericht 2024"; 1 TJ = 0.27778 GWh. Not
+#     converted between upper and lower heating value.
+#   lignite, nuclear: PyPSA technology-data v0.13.4, costs_2025.csv (DIW 2013 after IEA
+#     2011). Lignite is not traded, so there is no price for 2023.
+# efficiency, co2_t_per_mwh_th, vom_eur_per_mwh: PyPSA technology-data v0.13.4,
+#   costs_2025.csv (rows lignite, coal, CCGT/gas, nuclear/uranium). One value per fuel:
+#   every gas plant counts as a combined-cycle plant.
+# co2_price_eur_per_t: 83.47, mean EEX settlement price of an EU allowance in 2023
+#   (Verein der Kohlenimporteure, Jahresbericht 2024).
+technology,fuel_eur_per_mwh_th,efficiency,co2_t_per_mwh_th,vom_eur_per_mwh,co2_price_eur_per_t
+nuclear,3.4122,0.326,0.0,3.5464,83.47
+lignite,3.2985,0.33,0.4069,3.2612,83.47
+gas,42.012,0.57,0.198,4.5504,83.47
+hard_coal,26.164,0.356,0.3361,3.2612,83.47

@@ -41,6 +41,22 @@ RESIDUAL_FILES = (
     "EinheitenKernkraft",
     "EinheitenGeothermieGrubengasDruckentspannung",
 )
+# SMARD's generation series -> MaStR "Energietraeger" catalogue ids (ASSUMPTION: SMARD
+# publishes no list of units per series). Pumped storage comes from the storage file.
+FUELS = {
+    "hard_coal": {"2407"},  # Steinkohle
+    "lignite": {"2408"},  # Braunkohle
+    "gas": {"2410"},  # Erdgas
+    "nuclear": {"2494"},  # Kernenergie
+    "biomass": {"2493"},  # Biomasse
+    "hydro": {"2498"},  # Wasser
+    # Mineraloelprodukte, andere Gase, nicht biogener Abfall, Waerme, Wasserstoff
+    "other_conventional": {"2409", "2411", "2412", "2413", "3030"},
+    # Geothermie, Solarthermie, Klaerschlamm, Grubengas, Druck aus Gas-/Wasserleitungen
+    "other_renewable": {"2403", "2404", "2405", "2406", "2957", "2958"},
+}
+PUMPED_STORAGE = "pumped_storage"
+NUCLEAR_DATE = "2023-01-01"  # the last three reactors ran until 15 April 2023
 
 
 def read_units(mastr: Path, pattern: str) -> pd.DataFrame:
@@ -188,6 +204,61 @@ def main() -> None:
         ],
         national_shares(capacity["other"], zones).round(9),
     )
+
+    # The same units by fuel, plus pumped storage
+    pumped = read_units(args.mastr, "EinheitenStromSpeicher_*.csv")
+    pumped = pumped[in_operation(pumped, args.date) & (pumped["Land"] == GERMANY)]
+    pumped_zone, _ = fill_zone_from_district(
+        zone_of_ags(pumped["Gemeindeschluessel"], prefix_to_zone),
+        pumped["Bundesland"],
+        pumped["Landkreis"],
+    )
+    fuel_capacity = {
+        PUMPED_STORAGE: by_zone(pumped, pumped_zone, "Nettonennleistung", PUMPED_STORAGE)
+    }
+    for fuel, ids in FUELS.items():
+        units, unit_zone = other, zone
+        if fuel == "nuclear":
+            # Shut down before --date, but they produced in 2023.
+            units = read_units(args.mastr, "EinheitenKernkraft.csv")
+            units = units[in_operation(units, NUCLEAR_DATE) & (units["Land"] == GERMANY)]
+            unit_zone, _ = fill_zone_from_district(
+                zone_of_ags(units["Gemeindeschluessel"], prefix_to_zone),
+                units["Bundesland"],
+                units["Landkreis"],
+            )
+            # A reactor is the only large unit of its district; take the zone of any unit there.
+            lookup = pd.DataFrame(
+                {"land": other["Bundesland"], "kreis": other["Landkreis"], "zone": zone}
+            ).dropna()
+            lookup = lookup.drop_duplicates().drop_duplicates(["land", "kreis"], keep=False)
+            found = pd.Series(
+                list(zip(units["Bundesland"], units["Landkreis"], strict=True)), index=units.index
+            ).map(lookup.set_index(["land", "kreis"])["zone"].to_dict())
+            unit_zone = unit_zone.fillna(found)
+        keep = units["Energietraeger"].isin(ids)
+        fuel_capacity[fuel] = by_zone(units[keep], unit_zone[keep], "Nettonennleistung", fuel)
+    fuel_shares = pd.concat(
+        [national_shares(mw, zones).assign(technology=fuel) for fuel, mw in fuel_capacity.items()]
+    )
+    write(
+        SHARES / "generation_shares.csv",
+        [
+            "Share of each zone in Germany's capacity per fuel, for SMARD's national",
+            "generation series other than wind and solar.",
+            f"Source: {mastr_note}",
+            f"(nuclear: on {NUCLEAR_DATE}, the reactors ran until 15 April 2023); net capacity,",
+            "without emergency generators. Large units have no municipality key in the public",
+            "export and take the zone of the other units in their district (Landkreis).",
+            "ASSUMPTION: which MaStR fuel belongs to which SMARD series (FUELS in",
+            "scripts/build_zone_shares.py), and that generation follows capacity. Pumped",
+            "storage outside Germany that feeds into the German grid is not included.",
+            "Built by scripts/build_zone_shares.py; see docs/DATA.md.",
+        ],
+        fuel_shares[["technology", "zone_id", "share"]].round(9),
+    )
+    for fuel, mw in fuel_capacity.items():
+        capacity[fuel] = mw
 
     table = pd.DataFrame(capacity).reindex([z.zone_id for z in zones if z.tso_zone]).fillna(0.0)
     table.insert(0, "population", per_zone)

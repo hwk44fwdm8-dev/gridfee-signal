@@ -46,6 +46,7 @@ Outputs: `fee_signal` and `fee_signal_class` (hours x zones, CSV or Parquet) and
 | Wind and solar per zone, cost 0, can be curtailed | SMARD per TSO zone x capacity share | MaStR capacity with `--capacity-shares data/shares/capacity_shares.csv`, else placeholders |
 | Exchange with each neighbour | SMARD physical net export, summed over TSO zones: a load at the boundary zone when exporting, a free feed-in that can be curtailed when importing | observed; cut to the line capacity where it exceeds it |
 | All other generation | one "residual" generator per zone, same marginal cost everywhere; capacity = zone share x the year's highest national generation other than wind and solar (SMARD) | MaStR capacity with `--residual-shares data/shares/residual_shares.csv`, else a placeholder (share of demand) |
+| ... or, with `--generation-shares`: one generator per fuel and zone | SMARD national generation per fuel x the zone's share of the fuel's capacity. A fuel in `--generation-costs` is dispatched at its cost up to zone share x the year's highest national output of the fuel; the others feed in their observed output at cost 0 | MaStR capacity (`data/shares/generation_shares.csv`); costs are an assumption (`data/costs/generation_costs_2023.csv`, [DATA.md](DATA.md)) |
 | Lines | `data/networks/de22/lines.csv` | assumption, see [NETWORK.md](NETWORK.md) |
 
 Consequences:
@@ -54,8 +55,8 @@ Consequences:
   represented; that is the dispatch module of milestone 4. The backcast shows the
   congestion that wind, solar and cross-border flows cause on the assumed lines.
 - **The signal is in units of the residual cost.** With the default `--residual-cost 1`
-  a signal of 1 means "as much as one MWh of other generation costs". No cost is taken
-  from data.
+  a signal of 1 means "as much as one MWh of other generation costs". With
+  `--generation-costs` the signal is in EUR/MWh of the assumed costs.
 - **`--load-shedding-cost`** (default 1000) keeps every hour solvable. Hours with
   unserved load are reported; their prices reflect that penalty.
 - The fee signal covers the German zones only.
@@ -160,3 +161,48 @@ the single cost of other generation, not the zone shares or the weather.** A sig
 needs costs that differ between plants or zones (fuel-specific costs, or observed
 output of single plants), which is dispatch modelling and not part of this step.
 
+### Result for 2023 with one cost per fuel
+
+Same inputs as above, with `--generation-shares data/shares/generation_shares.csv
+--generation-costs data/costs/generation_costs_2023.csv` instead of
+`--residual-shares`. Nuclear, lignite, hard coal and gas are dispatched at 14, 116,
+156 and 107 EUR/MWh; biomass, hydro, pumped storage and the two "other" series feed
+in their observed national output. 8,756 hours solved, 13 of 13 checks pass.
+
+| Hours in 2023 | One cost | One cost per fuel |
+| --- | --- | --- |
+| Fee signal not neutral | 34 | 599 (6.8 %) |
+| ... of which with unserved load | 26 | 23 |
+| A line between German zones at its capacity | about 1,200 | 139 |
+| ... of which the line has a price | 5 | 54 |
+
+- **Lines between German zones with a price:** Sachsen-Anhalt–Niedersachsen-Süd in 36
+  hours, Hessen–BW-Karlsruhe in 18, Sachsen-Anhalt–Thüringen in 2,
+  Rheinland-Pfalz–BW-Karlsruhe in 1.
+- **Most non-neutral hours come from lines to neighbours:** Saarland–France has a price
+  in 337 hours and BW-Freiburg–France in 240. The observed exchange is fixed, so a full
+  border line now makes generation on one side dearer than on the other. (The cables to
+  Denmark East, Norway and Sweden are full in thousands of hours but are a neighbour's
+  only connection, which gives no signal inside Germany.)
+- **Where:** positive (feeding in adds to congestion) in the north and west in about
+  475 of the 599 hours, most in the Saarland; negative in Bayern and Baden-Württemberg
+  in about 480, most in BW-Freiburg. Over the non-neutral hours without unserved load
+  the mean is +36 EUR/MWh in the Saarland and -49 EUR/MWh in BW-Freiburg.
+- **When:** 289 of the hours are in December and January, 61 from May to August.
+
+**The dispatch behind this is far from the observed one.**
+
+| TWh in 2023 | SMARD | Model |
+| --- | --- | --- |
+| Gas | 51.1 | 122.5 |
+| Lignite | 77.8 | 36.0 |
+| Hard coal | 39.7 | 5.3 |
+| Nuclear | 6.7 | 7.8 |
+
+With the assumed prices a gas plant (107 EUR/MWh) is cheaper than a lignite plant
+(116 EUR/MWh), and with one cost per fuel that small difference decides everything:
+gas runs before all lignite and coal. The model also knows no heat demand, start-up
+costs, outages, reserves or long-term fuel contracts. So the fee signal of this run
+shows that differing costs do turn full lines into a signal, and where; its hours and
+sizes are not a finding about 2023. Getting closer needs costs per plant (efficiency
+by age) or the observed output of large plants, and is not part of this step.

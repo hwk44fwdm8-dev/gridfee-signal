@@ -12,6 +12,8 @@ from gridfee.backcast import (
     BackcastError,
     build_backcast_inputs,
     neighbour_net_export,
+    read_generation_costs,
+    read_generation_shares,
     run_backcast,
 )
 from gridfee.cli import app
@@ -19,6 +21,7 @@ from gridfee.data import smard
 from gridfee.injections import build_historical_injections
 from gridfee.network import Line, Zone, ZoneNetwork, load_network
 from gridfee.signal import NEGATIVE, NEUTRAL, POSITIVE
+from gridfee.validation.checks import check_residual_generation
 
 DE22 = Path(__file__).parents[1] / "data" / "networks" / "de22"
 HOURS = pd.date_range("2023-01-01", periods=4, freq="h", tz="Europe/Berlin", name="hour")
@@ -313,3 +316,123 @@ def test_shipped_zone_regions_cover_every_zone_once():
     assert regions["nuts2"].is_unique
     assert len(regions) == 38
     assert sorted(regions["zone_id"].unique()) == load_network(DE22).internal_zone_ids
+
+
+# Fuel model: lignite in the north, gas in the south, biomass half and half.
+FUEL_GENERATION = pd.DataFrame(
+    {
+        "wind_onshore": [100.0, 250.0, 0.0, 100.0],
+        "lignite": [60.0, 60.0, 120.0, 0.0],
+        "gas": [20.0, 20.0, 60.0, 100.0],
+        "biomass": [20.0, 20.0, 20.0, 20.0],
+        "nuclear": [0.0] * 4,
+    },
+    index=HOURS,
+)
+FUEL_SHARES = pd.DataFrame(
+    {"N": [1.0, 0.0, 0.5], "S": [0.0, 1.0, 0.5]}, index=["lignite", "gas", "biomass"]
+)
+
+
+def _fuel_inputs(**kwargs):
+    zonal = build_historical_injections(NETWORK.zones[:2], TSO_LOAD, TSO_RES)
+    return build_backcast_inputs(
+        NETWORK, zonal, FUEL_GENERATION, FLOWS, generation_shares=FUEL_SHARES, **kwargs
+    )
+
+
+def test_fuels_with_a_cost_are_dispatchable_and_the_others_follow_their_output():
+    inputs = _fuel_inputs(generation_costs={"lignite": 30.0, "gas": 90.0})
+
+    generators = inputs.generators
+    assert not inputs.placeholder_residual_shares
+    assert "residual:N" not in generators.index
+    assert generators.loc["lignite:N"].tolist() == ["N", 120.0, 30.0]
+    assert generators.loc["gas:S"].tolist() == ["S", 100.0, 90.0]
+    assert "lignite:S" not in generators.index and "nuclear:N" not in generators.index
+    # Lignite last produced in h2, so it is not available in h3.
+    assert inputs.availability["lignite:N"].tolist() == [1.0, 1.0, 1.0, 0.0]
+    assert "gas:S" not in inputs.availability.columns
+    # Biomass: observed output, half per zone, at no cost.
+    assert generators.loc["biomass:N"].tolist() == ["N", 10.0, 0.0]
+    assert inputs.availability["biomass:S"].tolist() == [1.0] * 4
+    # PTDF reference: shares of all fuels by energy (lignite 240, gas 200, biomass 80 MWh).
+    assert inputs.residual_shares["N"] == pytest.approx(280 / 520)
+
+
+def test_without_costs_every_fuel_follows_its_observed_output():
+    inputs = _fuel_inputs()
+
+    assert inputs.generators.loc["lignite:N"].tolist() == ["N", 120.0, 0.0]
+    assert inputs.availability["lignite:N"].tolist() == [0.5, 0.5, 1.0, 0.0]
+
+
+def test_fuel_costs_put_a_price_on_the_full_line():
+    """h0: S needs 140 MW; wind and lignite in N fill the 100 MW line, gas covers the rest."""
+    costs = {"lignite": 30.0, "gas": 90.0}
+    result = run_backcast(NETWORK, _fuel_inputs(generation_costs=costs), HOURS[[0]], 1000.0)
+
+    opf = result.opf
+    assert opf.flows_mw.loc[HOURS[0], "N-S"] == pytest.approx(100.0)
+    assert abs(opf.shadow_prices.loc[HOURS[0], "N-S"]) == pytest.approx(60.0)
+    assert result.signal.classification.loc[HOURS[0]].to_dict() == {"N": POSITIVE, "S": NEGATIVE}
+    # The validation compares the dispatch per fuel with the observed output.
+    checks = check_residual_generation(opf.dispatch_mw, FUEL_GENERATION).set_index("check")
+    assert checks.loc["lignite generated", ["observed", "modelled"]].tolist() == pytest.approx(
+        [60e-6, 40e-6]  # TWh
+    )
+    assert checks.loc["generation other than wind and solar", "modelled"] == pytest.approx(100e-6)
+
+
+def test_fuel_shares_and_costs_are_checked():
+    with pytest.raises(BackcastError, match="lack the fuels"):
+        _fuel_inputs_with(FUEL_SHARES.drop(index="biomass"))
+    with pytest.raises(BackcastError, match="sum to 1"):
+        _fuel_inputs_with(FUEL_SHARES * 0.5)
+    with pytest.raises(BackcastError, match="every internal zone"):
+        _fuel_inputs_with(FUEL_SHARES[["N"]])
+    with pytest.raises(BackcastError, match="without shares"):
+        _fuel_inputs(generation_costs={"oil": 1.0})
+    with pytest.raises(BackcastError, match=">= 0"):
+        _fuel_inputs(generation_costs={"gas": -1.0})
+    with pytest.raises(BackcastError, match="need generation_shares"):
+        _inputs(generation_costs={"gas": 1.0})
+
+
+def _fuel_inputs_with(shares):
+    zonal = build_historical_injections(NETWORK.zones[:2], TSO_LOAD, TSO_RES)
+    return build_backcast_inputs(NETWORK, zonal, FUEL_GENERATION, FLOWS, generation_shares=shares)
+
+
+def test_cost_file_gives_cost_per_mwh_of_electricity(tmp_path):
+    path = tmp_path / "costs.csv"
+    path.write_text(
+        "# note\ntechnology,fuel_eur_per_mwh_th,efficiency,co2_t_per_mwh_th,vom_eur_per_mwh,"
+        "co2_price_eur_per_t\ngas,40,0.5,0.2,4,80\n",
+        encoding="utf-8",
+    )
+
+    assert read_generation_costs(path).to_dict() == {"gas": pytest.approx((40 + 16) / 0.5 + 4)}
+
+    path.write_text(path.read_text(encoding="utf-8") + "gas,1,1,1,1,1\n", encoding="utf-8")
+    with pytest.raises(BackcastError, match="more than once"):
+        read_generation_costs(path)
+    path.write_text("technology,efficiency\ngas,0.5\n", encoding="utf-8")
+    with pytest.raises(BackcastError, match="missing columns"):
+        read_generation_costs(path)
+
+
+def test_shares_file_is_read_per_fuel(tmp_path):
+    path = tmp_path / "shares.csv"
+    path.write_text("# note\ntechnology,zone_id,share\ngas,N,0.25\ngas,S,0.75\nlignite,N,1\n")
+
+    shares = read_generation_shares(path)
+
+    assert shares.loc["gas"].to_dict() == {"N": 0.25, "S": 0.75}
+    assert shares.loc["lignite", "S"] == 0.0
+
+
+def test_shipped_cost_file_orders_the_fuels():
+    costs = read_generation_costs(DE22.parents[1] / "costs" / "generation_costs_2023.csv")
+
+    assert list(costs.sort_values().index) == ["nuclear", "gas", "lignite", "hard_coal"]
