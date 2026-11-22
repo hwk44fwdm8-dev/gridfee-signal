@@ -410,3 +410,65 @@ these zones the 22-zone value says little about a single site; `fee_signal.csv` 
 the regions. Mean signal over the signal hours: most positive in Hamburg/Schleswig-
 Holstein (+34 EUR/MWh), Mecklenburg-Vorpommern (+26) and Brandenburg (+24), most
 negative in Bremen (-45), Bayern-Mitte (-21) and Bayern-Süd/West (-16).
+
+## Two-run method: market run, then grid run (`gridfee backcast --method two-run`)
+
+The single run above dispatches every plant with the line limits in one optimisation.
+`--method two-run` is a second way to get the fee signal from the same inputs, closer
+to how the German market and the TSOs work, and it gives a modelled redispatch volume.
+The single run is the default and is not changed by it.
+
+1. **Market run.** Germany is one price zone: all demand, all generators and the
+   observed exchange with the neighbours are put on one bus, without any line. Plants
+   are dispatched by cost alone. The price of the hour is the cost of the last plant
+   needed (`market_price.csv`, `market_dispatch_mw.csv`).
+2. **Grid run.** The network with its line limits is solved again. Every generator
+   may be raised from its market dispatch up to its available capacity, or lowered
+   down to zero; the sum of what these movements cost is minimised. Without an
+   overload nothing moves. The flows, the dispatch, the line shadow prices and the
+   fee signal written are those of this run; the signal is computed from the shadow
+   prices and the PTDF exactly as in the single run.
+
+Modelled redispatch is the grid run's dispatch minus the market run's, in MW per hour,
+which with hourly data is MWh: `redispatch_mw.csv` per generator (fuel or plant class
+and zone; negative = lowered), `redispatch_raised_by_zone_mw.csv` and
+`redispatch_lowered_by_zone_mw.csv` per zone of the network, and
+`redispatch_hourly.csv` with the MWh raised, the MWh lowered and their cost per hour.
+
+The method adds these **assumptions**:
+
+- **What a plant is paid to move** (`--redispatch-markup`, default 1 EUR/MWh): a
+  plant that is raised is paid its marginal cost of the backcast plus the markup per
+  MWh; a plant that is lowered returns the marginal cost it saves less the markup.
+  Plants are thus moved at cost, as the cost-based German redispatch intends, and the
+  markup stands for the cost of changing a schedule. It is not taken from a source.
+  It keeps the grid run from moving plants without an overload. No start-up costs,
+  minimum loads, ramping or lead times: every plant can move in every hour.
+- **What curtailed wind and solar cost** (`--curtailment-cost`, default: the market
+  run's price of the hour, not below zero): lowering feed-in that has no marginal
+  cost costs this per MWh plus the markup. That is wind and solar, and also the
+  feed-in that follows its observed output, the lowest output of a plant class that
+  runs at no cost, and imports. The default is the market revenue the curtailed plant
+  loses; the feed-in premium that a plant under the EEG is compensated for as well is
+  not included. With a higher value conventional plants are lowered before wind and
+  solar, as the law's minimum factors intend.
+- **The market run sees no grid at all**, also not the lines to the neighbours: the
+  observed exchange is given to it. The grid run may cut an import or leave an export
+  unserved (at `--load-shedding-cost`) like the single run.
+- Where several generators have the same cost the market run's choice among them is
+  arbitrary, and so is the redispatch between them. With one residual cost for all
+  zones (no `--generation-costs`) the volume therefore says little.
+
+In a congested hour the two runs end at the same least-cost dispatch if every plant
+has a cost, and the line prices of the grid run are those of the single run plus two
+markups. They differ where feed-in at no cost is curtailed: the single run curtails it
+for free, the grid run at the curtailment cost. Hours in which either run leaves load
+unserved are not part of the signal.
+
+What is not modelled and matters for a comparison with the published volume:
+redispatch for voltage, countertrading, measures abroad, the grid reserve, and that
+TSOs plan redispatch on forecasts with a security margin (n-1 is only in the line
+margins of the network).
+
+**2023 on the 38-region network**: a comparison of the modelled redispatch with the
+volume the TSOs published for 2023 exists, but its figures are not published here yet.
