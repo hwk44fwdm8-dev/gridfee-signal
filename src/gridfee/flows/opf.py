@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 import pypsa
 
@@ -18,6 +19,8 @@ from gridfee.network.schema import ZoneNetwork
 GENERATOR_COLUMNS = ("zone", "p_nom_mw", "marginal_cost_eur_per_mwh")
 _SHEDDING_PREFIX = "load_shedding "
 _ANCHOR = "objective_anchor"
+PST_MARGINAL_COST = 1e-3
+ExtraFunctionality = Callable[[pypsa.Network, pd.Index], None]
 
 
 class OPFError(RuntimeError):
@@ -49,6 +52,7 @@ class OPFResult:
     load_shedding_mw: pd.DataFrame | None
     ptdf: pd.DataFrame
     objective_eur: float
+    pst_shift_deg: pd.DataFrame | None = None
 
     def congested(self, tolerance: float = 1e-6) -> pd.DataFrame:
         """Boolean frame, True where a line's capacity limit is binding at a cost."""
@@ -81,6 +85,21 @@ def build_pypsa_network(network: ZoneNetwork) -> pypsa.Network:
             s_nom=lines["capacity_mw"].to_numpy(),
             carrier="AC",
         )
+        pst = lines[lines["max_shift_deg"].fillna(0) > 0]
+        if not pst.empty:
+            shift = pst["susceptance_mw_per_rad"] * np.deg2rad(pst["max_shift_deg"])
+            n.lines.loc[pst.index, "s_nom"] = pst["capacity_mw"] + shift
+            n.add(
+                "Link",
+                pst.index,
+                bus0=pst["from_zone"].to_numpy(),
+                bus1=pst["to_zone"].to_numpy(),
+                p_nom=shift.to_numpy(),
+                p_min_pu=-1.0,
+                efficiency=1.0,
+                marginal_cost=PST_MARGINAL_COST,
+                carrier="AC",
+            )
     return n
 
 
@@ -95,6 +114,7 @@ def run_dc_opf(
     ptdf_reference: str | Mapping[str, float] | None = None,
     block_hours: int | None = None,
     workers: int = 1,
+    extra_functionality: ExtraFunctionality | None = None,
 ) -> OPFResult:
     """Minimise generation cost subject to zonal balances and line capacities.
 
@@ -120,6 +140,8 @@ def run_dc_opf(
         shadow prices are the same up to the solver's tolerance; where an hour has
         more than one cheapest dispatch, the one reported may differ.
     workers: processes that solve the blocks side by side.
+    extra_functionality: called with the PyPSA network and snapshots after model
+        creation; must be picklable when using multiple workers.
     """
     if block_hours is not None and block_hours < 1:
         raise OPFError("block_hours must be at least 1")
@@ -155,6 +177,7 @@ def run_dc_opf(
             None if availability is None else availability.iloc[start : start + step],
             None if marginal_cost is None else marginal_cost.iloc[start : start + step],
             load_shedding_cost,
+            extra_functionality,
         )
         for start in range(0, len(index), step)
     ]
@@ -182,6 +205,7 @@ def run_dc_opf(
         load_shedding_mw=None if load_shedding_cost is None else named(4, "zone_id"),
         ptdf=compute_ptdf(network, ptdf_reference),
         objective_eur=float(sum(block[5] for block in solved)),
+        pst_shift_deg=None if solved[0][6] is None else named(6, "line_id"),
     )
 
 
@@ -193,13 +217,22 @@ def _solve_block(
         pd.DataFrame | None,
         pd.DataFrame | None,
         float | None,
+        ExtraFunctionality | None,
     ],
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame | None, float]:
+) -> tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame | None,
+    float,
+    pd.DataFrame | None,
+]:
     """Solve the validated snapshots of one block as one problem.
 
     Returns flows, shadow prices, nodal prices, dispatch, load shedding and the cost.
     """
-    network, load_mw, generators, availability, marginal_cost, load_shedding_cost = block
+    network, load_mw, generators, availability, marginal_cost, load_shedding_cost, hook = block
     n = build_pypsa_network(network)
     n.set_snapshots(load_mw.index)
     n.add("Load", load_mw.columns, bus=load_mw.columns, p_set=load_mw)
@@ -232,7 +265,26 @@ def _solve_block(
         # only). A generator without capacity adds one and changes nothing else.
         n.add("Generator", _ANCHOR, bus=network.zone_ids[0], p_nom=0.0, marginal_cost=1.0)
 
-    _solve(n)
+    lines = network.lines_frame()
+    pst = lines[lines["max_shift_deg"].fillna(0) > 0]
+
+    def extra(n: pypsa.Network, snapshots: pd.Index) -> None:
+        if not pst.empty:
+            model = n.model
+            link = model["Link-p"].sel(name=pst.index)
+            total = model["Line-s"].sel(name=pst.index) + link
+            capacity = pst["capacity_mw"].to_xarray().rename({"line_id": "name"})
+            model.add_constraints(total <= capacity, name="PST-upper")
+            model.add_constraints(total >= -capacity, name="PST-lower")
+            # Charge absolute movement, not signed flow, so idle PSTs stay at zero.
+            magnitude = model.add_variables(lower=0, coords=link.coords, name="PST-magnitude")
+            model.add_constraints(magnitude >= link, name="PST-magnitude-positive")
+            model.add_constraints(magnitude >= -link, name="PST-magnitude-negative")
+            model.objective += PST_MARGINAL_COST * (magnitude - link).sum()
+        if hook is not None:
+            hook(n, snapshots)
+
+    _solve(n, extra if not pst.empty or hook is not None else None)
 
     dispatch = n.generators_t.p.reindex(columns=n.generators.index, fill_value=0.0)
     dispatch = dispatch.drop(columns=_ANCHOR, errors="ignore")
@@ -245,16 +297,30 @@ def _solve_block(
     line_ids = network.line_ids
     mu_upper = n.lines_t.mu_upper.reindex(columns=line_ids, fill_value=0.0)
     mu_lower = n.lines_t.mu_lower.reindex(columns=line_ids, fill_value=0.0)
+    flows = n.lines_t.p0.reindex(columns=line_ids, fill_value=0.0).copy()
+    shadow = -(mu_upper + mu_lower)
+    shifts = None
+    if not pst.empty:
+        power = n.links_t.p0[pst.index]
+        flows[pst.index] += power
+        # Raising capacity_mw raises the combined limit and the relaxed Line-s limit,
+        # which binds too when the shift is at its lower bound.
+        shadow[pst.index] -= (
+            n.model.constraints["PST-upper"].dual.to_pandas()
+            + n.model.constraints["PST-lower"].dual.to_pandas()
+        )
+        shifts = np.rad2deg(power / pst["susceptance_mw_per_rad"])
 
     return (
-        n.lines_t.p0.reindex(columns=line_ids, fill_value=0.0),
+        flows,
         # PyPSA reports the raw duals of the cost minimisation: mu_upper <= 0 for
         # flow <= capacity and mu_lower >= 0 for flow >= -capacity.
-        -(mu_upper + mu_lower),
+        shadow,
         n.buses_t.marginal_price[network.zone_ids],
         dispatch.loc[:, ~is_shedding],
         load_shedding,
         float(n.objective),
+        shifts,
     )
 
 
@@ -319,7 +385,7 @@ def _validate_inputs(
     return load_mw, generators, availability
 
 
-def _solve(n: pypsa.Network) -> None:
+def _solve(n: pypsa.Network, extra_functionality: ExtraFunctionality | None = None) -> None:
     # PyPSA and linopy log every solve at INFO and warn about lines without
     # resistance, which the linear flow model does not use.
     loggers = [logging.getLogger(name) for name in ("pypsa", "linopy")]
@@ -334,6 +400,7 @@ def _solve(n: pypsa.Network) -> None:
                 assign_all_duals=True,
                 progress=False,
                 solver_options={"output_flag": False, "log_to_console": False},
+                extra_functionality=extra_functionality,
             )
     finally:
         for logger, level in zip(loggers, levels, strict=True):
