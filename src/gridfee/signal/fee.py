@@ -93,9 +93,9 @@ def aggregate_signal(result: FeeSignal, groups: pd.DataFrame) -> FeeSignal:
 
     ``groups`` has one row per solved zone: ``zone_id``, ``report_zone`` and
     ``weight`` (>= 0, not all zero in a reporting zone; a zone with weight 0, such
-    as a bus without load, does not count). The signal of a reporting zone is the weighted mean of the
-    signals of its zones, hour by hour, classified with the same threshold. Zones
-    that ``groups`` does not list (the boundary zones) are passed through.
+    as a bus without load, does not count). The signal of a reporting zone is the
+    weighted mean of the signals of its zones, hour by hour, classified with the same
+    threshold. Zones that ``groups`` does not list (the boundary zones) are passed through.
 
     The mean hides differences inside a reporting zone: when a line between two of
     its zones is congested, their signals have opposite signs and the mean is
