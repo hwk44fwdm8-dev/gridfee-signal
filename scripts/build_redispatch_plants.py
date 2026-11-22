@@ -47,8 +47,8 @@ HEADER = """\
 #   same_site        ASSUMPTION: a unit the plant list lacks, put at the listed units
 #                    of the same power station (note)
 #   substation_name  the name gives a substation of the list
-#   landing_point    offshore wind farm, at the substation where its grid connection
-#                    comes ashore; note gives the TSO's statement, or ASSUMPTION
+#   landing_point    offshore wind farm, at the grid connection point of its
+#                    connection in the Netzentwicklungsplan (note)
 #   cluster_code     ASSUMPTION: 50Hertz's code for a group of renewable plants in a
 #                    distribution grid (50H_<grid operator>_CR_<code>), read as the
 #                    short name of a substation in 50Hertz's static grid model (note)

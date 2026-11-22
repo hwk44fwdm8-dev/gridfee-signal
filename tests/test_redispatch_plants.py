@@ -142,6 +142,20 @@ def test_committed_table():
     assert table.loc[assumed, "note"].ne("").all()
     # A cluster code is the short name of a substation of the grid operator's area.
     assert places.loc["50H_AVA_CR_WOL"].tolist() == ["wolmirstedt", "DE05", "DEE0"]
+    # Offshore wind farms stand at the grid connection points of the NEP.
+    landing = table[table["located_by"] == "landing_point"].set_index("plant")["substation_id"]
+    assert landing.to_dict() == {
+        "50H OWP Arcadis Ost 1": "lubmin",
+        "50H OWP Arkona": "lubmin",
+        "50H OWP Baltic 1+2 Süd MIO": "bentwisch",
+        "50H OWP MIO Baltic 1+2": "bentwisch",
+        "50H OWP Wikinger": "lubmin",
+        "OWP Nordergründe": "inhausen",
+        "OWP Riffgat": "emden-borssum",
+    }
+    named = {"Büttel": "buettel", "Diele": "diele", "Dörpen-West": "doerpen-w"}
+    for name, substation in (named | {"Emden-Ost": "emden-o"}).items():
+        assert places.loc[f"OWP UW {name}", "substation_id"] == substation
     # Offshore wind that lands at Buettel is in Schleswig-Holstein's zone.
     assert places.loc["OWP UW Büttel", "report_zone"] == "DE07"
 

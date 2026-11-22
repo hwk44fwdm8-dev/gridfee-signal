@@ -462,10 +462,9 @@ when the substation list changes. A name is located in one of five ways
   five more), put at the listed units of the same power station.
 - `substation_name`: the name gives the substation (`OWP UW Büttel`,
   `SHN Cluster Heide West`, `50H UW Bertikow`).
-- `landing_point`: seven offshore wind farms named without their substation, put
-  where their grid connection comes ashore. The TSO states it for four (Arkona,
-  Wikinger and Arcadis Ost 1 at Lubmin, Riffgat at Emden/Borssum); for Baltic 1 and 2
-  (Bentwisch) and Nordergründe (Inhausen) it is an **ASSUMPTION**, see `note`.
+- `landing_point`: seven offshore wind farms named without their substation, put at
+  the grid connection point (Netzverknüpfungspunkt) of their connection in the
+  Netzentwicklungsplan: Lubmin, Bentwisch, Inhausen, Emden/Borssum (`note`).
 - `cluster_code` (**ASSUMPTION**): 50Hertz's groups of renewable plants in a
   distribution grid (`50H_MNS_CR_LAU_Nord`). The last part of 30 of the 33 codes is
   the short name of a substation in 50Hertz's static grid model (`D8LAU`,
@@ -521,12 +520,33 @@ Checks against the TSOs' own publications (November 2026):
   Schwarze Pumpe, Boxberg, Lippendorf, Schkopau, Rostock, Goldisthal and Hohenwarte,
   and two offshore connections; the map names no substation, so this is agreement
   by position, read off by eye.
-- **50Hertz, offshore projects** Ostwind 1 and Ostwind 2: "Anschlusspunkt an Land
-  Umspannwerk Lubmin" for Arkona, Wikinger and Arcadis Ost 1.
+- **Netzentwicklungsplan Strom 2037/2045 (2023), 2nd draft, chapter 4**, tables 15
+  to 18 (offshore connections in operation and under construction, by the four
+  TSOs,
+  <https://www.netzentwicklungsplan.de/sites/default/files/2023-06/NEP_2037_2045_V2023_2_Entwurf_Kap4_0.pdf>):
+  every offshore row of the table agrees with it.
+
+  | plant names | connection in the NEP | grid connection point |
+  | --- | --- | --- |
+  | `OWP UW Büttel` | NOR-4-1, NOR-4-2, NOR-5-1 (HelWin1, HelWin2, SylWin1) | Büttel |
+  | `OWP UW Diele` | NOR-6-1, NOR-6-2 (BorWin1, BorWin2) | Diele |
+  | `OWP UW Dörpen-West` | NOR-2-2, NOR-2-3, NOR-3-1 (DolWin1 to 3) | Dörpen/West |
+  | `OWP UW Emden-Ost` | NOR-8-1 (BorWin3), NOR-3-3 (DolWin6, 2023) | Emden/Ost |
+  | `OWP Riffgat` | NOR-0-1 | Emden/Borßum |
+  | `OWP Nordergründe` | NOR-0-2 | Inhausen |
+  | `50H OWP Arkona`, `Wikinger` | OST-1-1 to OST-1-3 (Ostwind 1) | Lubmin |
+  | `50H OWP Arcadis Ost 1` | OST-2-1 to OST-2-3 (Ostwind 2) | Lubmin |
+  | `50H OWP ... Baltic 1+2` | OST-3-1, OST-3-2 (Kriegers Flak) | Bentwisch |
+
+  The NEP names the connections, not the wind farms. 50Hertz's project pages name
+  Arkona and Wikinger for Ostwind 1 and Arcadis Ost 1 for Ostwind 2 ("Anschlusspunkt
+  an Land Umspannwerk Lubmin"); that OST-3-1 and OST-3-2 are the connections of
+  Baltic 1 and Baltic 2 follows from their years (2011, 2015) and is not stated in
+  the table.
 - **TenneT, project Riffgat**: connected at Emden/Borssum until spring 2023, at
-  Emden/Ost since. The table keeps Emden/Borssum, where 96 % of the wind farm's
-  2023 redispatch energy falls (January to March). TenneT's page on Nordergründe
-  names no substation.
+  Emden/Ost since (the NEP of June 2023 still has Emden/Borßum). The table keeps
+  Emden/Borssum, where 96 % of the wind farm's 2023 redispatch energy falls
+  (January to March).
 - Not checked against a TSO source: the plants of Amprion, TransnetBW and TenneT on
   land. No publication of theirs with the connection point of each plant was looked
   for; their substations rest on the plant list alone.

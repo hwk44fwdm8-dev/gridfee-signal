@@ -9,8 +9,8 @@
 #   same_site        ASSUMPTION: a unit the plant list lacks, put at the listed units
 #                    of the same power station (note)
 #   substation_name  the name gives a substation of the list
-#   landing_point    offshore wind farm, at the substation where its grid connection
-#                    comes ashore; note gives the TSO's statement, or ASSUMPTION
+#   landing_point    offshore wind farm, at the grid connection point of its
+#                    connection in the Netzentwicklungsplan (note)
 #   cluster_code     ASSUMPTION: 50Hertz's code for a group of renewable plants in a
 #                    distribution grid (50H_<grid operator>_CR_<code>), read as the
 #                    short name of a substation in 50Hertz's static grid model (note)
@@ -42,11 +42,11 @@ plant,located_by,plant_list_ids,substation_id,basis,distance_km,reason,note
 50H Hamburg Wedel1 Block1,plant_list,BNA0404,kummerfeld,nearest,14.2,,
 50H InfraLeuna IKW,plant_list,BNA0593 BNA0594 BNA0595 BNA0598b,lauchstaedt,nearest,14.7,,
 50H Neubrandenburg GuD,plant_list,BNA0688,altentreptow-sued,nearest,9.6,,
-50H OWP Arcadis Ost 1,landing_point,,lubmin,name,,,"50Hertz, project Ostwind 2: connection point on land Umspannwerk Lubmin"
-50H OWP Arkona,landing_point,,lubmin,name,,,"50Hertz, project Ostwind 1: connection point on land Umspannwerk Lubmin"
-50H OWP Baltic 1+2 Süd MIO,landing_point,,bentwisch,name,,,ASSUMPTION: Bentwisch; 50Hertz's grid map shows the two wind farms at the 380/150 kV substation near Rostock without naming it
-50H OWP MIO Baltic 1+2,landing_point,,bentwisch,name,,,ASSUMPTION: Bentwisch; 50Hertz's grid map shows the two wind farms at the 380/150 kV substation near Rostock without naming it
-50H OWP Wikinger,landing_point,,lubmin,name,,,"50Hertz, project Ostwind 1: connection point on land Umspannwerk Lubmin"
+50H OWP Arcadis Ost 1,landing_point,,lubmin,name,,,"NEP 2037/2045 (2023), 2nd draft, chapter 4, table 18: OST-2-1 to OST-2-3 (Ostwind 2) at Lubmin; 50Hertz, project Ostwind 2, names Arcadis Ost 1"
+50H OWP Arkona,landing_point,,lubmin,name,,,"NEP 2037/2045 (2023), 2nd draft, chapter 4, table 17: OST-1-1 to OST-1-3 (Ostwind 1) at Lubmin; 50Hertz, project Ostwind 1, names Arkona and Wikinger"
+50H OWP Baltic 1+2 Süd MIO,landing_point,,bentwisch,name,,,"NEP 2037/2045 (2023), 2nd draft, chapter 4, table 17: OST-3-1 and OST-3-2 (Kriegers Flak, in operation 2011 and 2015) at Bentwisch; the table does not name the wind farms Baltic 1 and 2"
+50H OWP MIO Baltic 1+2,landing_point,,bentwisch,name,,,"NEP 2037/2045 (2023), 2nd draft, chapter 4, table 17: OST-3-1 and OST-3-2 (Kriegers Flak, in operation 2011 and 2015) at Bentwisch; the table does not name the wind farms Baltic 1 and 2"
+50H OWP Wikinger,landing_point,,lubmin,name,,,"NEP 2037/2045 (2023), 2nd draft, chapter 4, table 17: OST-1-1 to OST-1-3 (Ostwind 1) at Lubmin; 50Hertz, project Ostwind 1, names Arkona and Wikinger"
 50H Rostock Marienehe,plant_list,BNA0848,bentwisch,nearest,8.8,,
 50H Stralsund BHKW+P2H,none,,,,,not_in_plant_list,
 50H UW Altentreptow,none,,,,,ambiguous,
@@ -217,8 +217,8 @@ Niederrad 1,plant_list,BNA0285,frankfurt-sw,nearest,1.0,,
 NIEHL-31-GUD,plant_list,BNA1818,duennwald,nearest,3.7,,
 NIEHL-II,plant_list,BNA0545,duennwald,nearest,3.7,,
 NIEHL-II-GT,plant_list,BNA0545,duennwald,nearest,3.7,,
-OWP Nordergründe,landing_point,,inhausen,name,,,"ASSUMPTION: Inhausen, from general knowledge; TenneT's project page names no substation"
-OWP Riffgat,landing_point,,emden-borssum,name,,,"TenneT, project Riffgat: Umspannwerk Emden/Borssum until spring 2023, Emden/Ost since; 96 % of the 2023 energy falls in January to March"
+OWP Nordergründe,landing_point,,inhausen,name,,,"NEP 2037/2045 (2023), 2nd draft, chapter 4, table 15: NOR-0-2 (Nordergruende) at Inhausen"
+OWP Riffgat,landing_point,,emden-borssum,name,,,"NEP 2037/2045 (2023), 2nd draft, chapter 4, table 15: NOR-0-1 (Riffgat) at Emden/Borssum. TenneT, project Riffgat: at Emden/Ost since spring 2023; 96 % of the 2023 energy falls in January to March"
 OWP UW Büttel,substation_name,,buettel,name,,,
 OWP UW Diele,substation_name,,diele,name,,,
 OWP UW Dörpen-West,substation_name,,doerpen-w,name,,,
