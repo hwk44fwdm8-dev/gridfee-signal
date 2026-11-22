@@ -124,8 +124,8 @@ def run_two_run_backcast(
     Arguments as for :func:`gridfee.backcast.run_backcast`. ``chunk_hours`` hours are
     solved at a time to bound memory; the results do not depend on it.
     ``block_hours`` and ``workers`` are those of :func:`gridfee.flows.run_dc_opf`
-    and apply to the grid run, which is the one that carries the network; with
-    ``block_hours`` the grid run is not chunked a second time.
+    and apply to both runs; with ``block_hours`` the hours are not chunked a second
+    time.
 
     Hours in which either run leaves load unserved are not part of the signal, as in
     the single run. Where several generators have the same cost, the market run's
@@ -159,6 +159,8 @@ def run_two_run_backcast(
             marginal_cost=inputs.marginal_cost,
             snapshots=chunk,
             load_shedding_cost=load_shedding_cost,
+            block_hours=block_hours,
+            workers=workers,
         )
         for chunk in chunks
     ]

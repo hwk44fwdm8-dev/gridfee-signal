@@ -326,6 +326,11 @@ def _solve(n: pypsa.Network) -> None:
     levels = [logger.level for logger in loggers]
     for logger in loggers:
         logger.setLevel(logging.ERROR)
+    solver_options: dict[str, object] = {"output_flag": False, "log_to_console": False}
+    if len(n.buses) == 1:
+        # On one bus each hour's balance holds every generator, and HiGHS's
+        # presolve then takes several GB for a day of a few thousand generators.
+        solver_options["presolve"] = "off"
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
@@ -333,7 +338,7 @@ def _solve(n: pypsa.Network) -> None:
                 solver_name="highs",
                 assign_all_duals=True,
                 progress=False,
-                solver_options={"output_flag": False, "log_to_console": False},
+                solver_options=solver_options,
             )
     finally:
         for logger, level in zip(loggers, levels, strict=True):
