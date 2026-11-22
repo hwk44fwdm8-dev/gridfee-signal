@@ -42,6 +42,17 @@ here with their source. The 2023 prices are single published figures (Verein der
 Kohlenimporteure, Jahresbericht 2024; Monitoring der Energiewende in
 Baden-Württemberg, Statusbericht 2024), also cited with their source.
 
+`fuel_prices_2023.csv` holds twelve monthly values from the Statistisches Bundesamt
+(Destatis), Monatliche Erdgasimporte, cited with their source in the file. The licence
+of that table was not checked.
+
+`data/shares/plant_efficiency.csv` is derived (shares of capacity per efficiency class
+and zone, no plant-level rows) from: Open Power System Data. 2020. Data Package
+Conventional power plants. Version 2020-10-01.
+https://doi.org/10.25832/conventional_power_plants/2020-10-01 (primary data: BNetzA
+Kraftwerksliste, Umweltbundesamt, and efficiencies researched by OPSD). The data package
+asks for this attribution and states no licence.
+
 ## `data/weather/`
 
 `capacity_factors_2023.csv` was generated using Copernicus Climate Change Service

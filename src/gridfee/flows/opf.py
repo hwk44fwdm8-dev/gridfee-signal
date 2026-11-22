@@ -88,6 +88,7 @@ def run_dc_opf(
     generators: pd.DataFrame,
     availability: pd.DataFrame | None = None,
     snapshots: Iterable | None = None,
+    marginal_cost: pd.DataFrame | None = None,
     load_shedding_cost: float | None = None,
     ptdf_reference: str | Mapping[str, float] | None = None,
 ) -> OPFResult:
@@ -100,6 +101,8 @@ def run_dc_opf(
         can be curtailed for free.
     availability: snapshots x generator ids, share of ``p_nom_mw`` available in each
         hour (0..1). Generators without a column are fully available.
+    marginal_cost: snapshots x generator ids, EUR/MWh, for generators whose cost
+        changes over time; it replaces their ``marginal_cost_eur_per_mwh``.
     snapshots: subset of the index of ``load_mw`` to solve, e.g. representative
         hours. The hours are independent of each other, so a subset gives the same
         hourly results as the full run.
@@ -118,6 +121,15 @@ def run_dc_opf(
     load_mw = load_mw.set_axis(positions)
     if availability is not None:
         availability = availability.set_axis(positions)
+    if marginal_cost is not None:
+        unknown = sorted(set(marginal_cost.columns) - set(generators.index))
+        if unknown:
+            raise OPFError(f"marginal_cost has columns that are not generators: {unknown}")
+        if len(index.difference(marginal_cost.index)):
+            raise OPFError("marginal_cost lacks snapshots")
+        marginal_cost = marginal_cost.loc[index].set_axis(positions)
+        if marginal_cost.isna().any().any():
+            raise OPFError("marginal_cost has gaps")
 
     n = build_pypsa_network(network)
     n.set_snapshots(positions)
@@ -130,6 +142,8 @@ def run_dc_opf(
         marginal_cost=generators["marginal_cost_eur_per_mwh"].to_numpy(),
         p_max_pu=availability if availability is not None else 1.0,
     )
+    if marginal_cost is not None and not marginal_cost.empty:
+        n.generators_t.marginal_cost = marginal_cost
     if load_shedding_cost is not None:
         # Shedding is capped at the zone's own load in each hour, so it can never
         # act as generation that exports to other zones.

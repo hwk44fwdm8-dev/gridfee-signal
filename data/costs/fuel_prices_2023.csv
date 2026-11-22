@@ -1,0 +1,22 @@
+# Monthly fuel prices 2023 per MWh of heat; `gridfee backcast --fuel-prices` reads it.
+# gas: value of natural gas imports divided by their energy (EUR per terajoule), Statistisches
+#   Bundesamt, "Monatliche Erdgasimporte" (Warennummer 2711 21 00),
+#   https://www.destatis.de/DE/Themen/Wirtschaft/Aussenhandel/Tabellen/erdgas-monatlich.html
+#   read on 22 November 2026; 1 TJ = 277.78 MWh. EUR/TJ January to December 2023:
+#   18541.80, 14409.35, 13098.69, 11769.65, 8236.63, 11009.99, 9274.25, 10017.72, 10257.98, 11621.39, 12247.85, 10676.67.
+#   ASSUMPTIONS: the import price stands for what gas plants paid (no transport, storage or
+#   hedging); the table does not say whether the energy is the upper or lower heating
+#   value, and no conversion is made (docs/DATA.md).
+month,technology,fuel_eur_per_mwh_th
+1,gas,66.750
+2,gas,51.873
+3,gas,47.155
+4,gas,42.370
+5,gas,29.652
+6,gas,39.636
+7,gas,33.387
+8,gas,36.064
+9,gas,36.928
+10,gas,41.837
+11,gas,44.092
+12,gas,38.436

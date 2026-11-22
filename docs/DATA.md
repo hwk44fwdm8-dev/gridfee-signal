@@ -213,6 +213,40 @@ to industry. Each zone still belongs to one TSO zone only (see above).
 The order of gas and lignite depends on these choices: with a gas efficiency of 0.52
 instead of 0.57, gas would cost more than lignite.
 
+### Plant efficiency classes, monthly prices and observed bounds (ASSUMPTION)
+
+`gridfee backcast --plant-efficiency ... --fuel-prices ...` (with `--generation-shares`
+and `--generation-costs`) replaces the one cost per fuel:
+
+- **`data/shares/plant_efficiency.csv`** (`scripts/build_plant_efficiency.py`): per fuel
+  and zone, the share of capacity in each class of net electrical efficiency (width
+  0.02). Source: Open Power System Data, Conventional power plants, version 2020-10-01
+  (from the BNetzA Kraftwerksliste and the UBA plant database), plants with status
+  "operating", placed by their coordinates. The list gives a researched efficiency for
+  15.7 of 18.0 GW of lignite, 10.5 of 20.9 GW of hard coal and 9.6 of 23.3 GW of gas;
+  the rest is OPSD's estimate from the year of commissioning. The capacity-weighted
+  mean is 0.39 for lignite, 0.42 for hard coal and 0.49 for gas. **The list is of
+  2020**: plants closed since are in it and newer ones are not. It only sets the
+  classes; the capacity per zone still comes from MaStR (`generation_shares.csv`).
+  Zones without a listed plant of a fuel get Germany's classes.
+- **`data/costs/fuel_prices_2023.csv`**: gas price per month, the value of natural gas
+  imports divided by their energy from the Statistisches Bundesamt (Monatliche
+  Erdgasimporte, Warennummer 2711 21 00). The 2023 mean of that statistic is 11,946
+  EUR/TJ; the 11,670 EUR/TJ in `generation_costs_2023.csv` is a quoted figure and is
+  no longer used for gas when this file is passed. The table does not say whether the
+  energy is the upper or lower heating value; no conversion is made. If it is the upper
+  value, gas costs about 11 % more per MWh of heat than assumed here.
+- **Cost of a class in an hour** = (fuel price of the month + CO2 price x CO2
+  intensity) / class efficiency + other variable cost, with all but the gas price and
+  the efficiency from `generation_costs_2023.csv`. Nuclear keeps its one efficiency.
+- **Observed bounds** (`--plant-window day` or `week`, Europe/Berlin): per fuel, the
+  highest national output of the day is the available capacity and the lowest output
+  of the day runs at no cost. Both are split over zones by `generation_shares.csv`.
+- **Balance of the observations:** in each hour, SMARD load plus physical net export
+  minus national generation is spread over the zones by their share of demand, as a
+  supply at no cost (generator `balance:<zone>`) where it is positive and as demand
+  where it is negative. SMARD does not explain the difference.
+
 ## Hourly capacity factors from ERA5
 
 With capacity shares alone every zone of a TSO zone has the TSO zone's hourly shape:

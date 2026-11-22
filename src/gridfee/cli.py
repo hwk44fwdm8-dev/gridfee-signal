@@ -10,9 +10,13 @@ import typer
 
 from gridfee.backcast import (
     BackcastError,
+    PlantCosts,
     build_backcast_inputs,
+    read_cost_parameters,
+    read_fuel_prices,
     read_generation_costs,
     read_generation_shares,
+    read_plant_efficiency,
     run_backcast,
 )
 from gridfee.data import smard
@@ -297,6 +301,24 @@ def backcast(
         "(data/costs/generation_costs_2023.csv); needs --generation-shares. Fuels in it are "
         "dispatched at their cost, the others feed in their observed national output.",
     ),
+    plant_efficiency: Path | None = typer.Option(
+        None,
+        help="CSV technology,zone_id,efficiency,share: efficiency classes of the plants per "
+        "fuel and zone (data/shares/plant_efficiency.csv); needs --generation-costs. Each "
+        "class is then dispatched at its own cost, within the fuel's highest national "
+        "output of the week, and the fuel's lowest output of the month runs at no cost.",
+    ),
+    fuel_prices: Path | None = typer.Option(
+        None,
+        help="CSV month,technology,fuel_eur_per_mwh_th: monthly fuel prices that replace "
+        "those of --generation-costs (data/costs/fuel_prices_2023.csv); needs "
+        "--plant-efficiency.",
+    ),
+    plant_window: str = typer.Option(
+        "day",
+        help="With --plant-efficiency: 'day' or 'week'. A fuel's highest observed national "
+        "output of the day or week is its available capacity, its lowest runs at no cost.",
+    ),
     load_shedding_cost: float = typer.Option(
         1000.0, help="Cost of unserved load in EUR/MWh, which keeps every hour solvable."
     ),
@@ -335,7 +357,20 @@ def backcast(
             if capacity_factors is None
             else read_capacity_factors(capacity_factors),
         )
-        costs = None if generation_costs is None else read_generation_costs(generation_costs)
+        if plant_efficiency is not None and generation_costs is None:
+            raise BackcastError("--plant-efficiency needs --generation-costs")
+        if fuel_prices is not None and plant_efficiency is None:
+            raise BackcastError("--fuel-prices needs --plant-efficiency")
+        costs = plants = None
+        if plant_efficiency is not None:
+            plants = PlantCosts(
+                read_cost_parameters(generation_costs),
+                read_plant_efficiency(plant_efficiency),
+                None if fuel_prices is None else read_fuel_prices(fuel_prices),
+                plant_window,
+            )
+        elif generation_costs is not None:
+            costs = read_generation_costs(generation_costs)
         inputs = build_backcast_inputs(
             network,
             zonal,
@@ -349,6 +384,7 @@ def backcast(
             )["share"],
             None if generation_shares is None else read_generation_shares(generation_shares),
             costs,
+            plants,
         )
         subset = None
         if hours is not None:
@@ -400,6 +436,19 @@ def backcast(
                 + ", ".join(f"{fuel} {cost:,.1f}" for fuel, cost in costs.sort_values().items())
                 + ". All other fuels feed in their observed national output. This is not a "
                 "market model: no start-up costs, heat demand, outages or reserves."
+            )
+        if plants is not None:
+            notes.append(
+                f"{', '.join(plants.parameters.index)} are dispatched by plant efficiency class "
+                f"({plant_efficiency.name}, a plant list of 2020) at fuel and CO2 cost divided "
+                f"by efficiency ({generation_costs.name}"
+                + ("" if fuel_prices is None else f", monthly prices from {fuel_prices.name}")
+                + "); all ASSUMPTIONS, docs/DATA.md. Per fuel, the capacity available is its "
+                f"highest observed national output of the {plant_window}, and its lowest "
+                f"observed output of the {plant_window} runs at no cost. The observed output "
+                "therefore bounds the modelled fuel mix; within those bounds the cost decides. "
+                "Where SMARD's load, generation and cross-border flows do not balance in an "
+                "hour, the difference is spread over the zones like demand. Not a market model."
             )
         for row in inputs.clipped_exchange.itertuples():
             notes.append(

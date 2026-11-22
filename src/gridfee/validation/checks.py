@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 
 import pandas as pd
 
-from gridfee.backcast import GENERATOR_SEPARATOR, RESIDUAL, neighbour_net_export
+from gridfee.backcast import CLASS_SEPARATOR, GENERATOR_SEPARATOR, RESIDUAL, neighbour_net_export
 from gridfee.data.smard import TSO_RES_FILTERS
 from gridfee.network import ZoneNetwork
 
@@ -61,8 +61,11 @@ def _dispatch_by_kind(dispatch_mw: pd.DataFrame) -> pd.DataFrame:
     parts = dispatch_mw.columns.str.split(GENERATOR_SEPARATOR, n=1)
     if (parts.str.len() != 2).any():
         raise ValidationError("generator ids must look like '<kind>:<zone id>'")
-    return dispatch_mw.set_axis(
-        pd.MultiIndex.from_tuples(map(tuple, parts), names=["kind", "zone"]), axis=1
+    # "<kind>:<zone id>@<class>": the classes of a kind in a zone are added up.
+    pairs = [(kind, zone.split(CLASS_SEPARATOR)[0]) for kind, zone in parts]
+    columns = pd.MultiIndex.from_tuples(pairs, names=["kind", "zone"])
+    return (
+        dispatch_mw.set_axis(columns, axis=1).T.groupby(level=["kind", "zone"], sort=False).sum().T
     )
 
 
