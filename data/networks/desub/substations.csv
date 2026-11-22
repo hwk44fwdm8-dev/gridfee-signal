@@ -82,8 +82,8 @@ eiberg,Eiberg,substation,AMPRION GMBH,DEA5,DE10,51.4493,7.1262,True,True,1,name,
 eichstetten,Eichstetten,substation,TRANSNETBW,DE13,DE21,48.0996,7.7539,True,True,1,name,way/242756113
 eickum,Eickum,substation,TENNETGMBH,DEA4,DE10,52.1052,8.5719,False,True,0,name,way/24230738
 eisenach,Eisenach,substation,50HERTZ,DEG0,DE06,51.0022,10.3864,False,True,0,name,way/948341123
-eisenhuettenstadt,Eisenhuettenstadt,substation,50HERTZ,DE40,DE02,52.4428,14.1333,False,True,0,nearest,way/414169327
-eisenhuettenstadt-abzweig,Eisenhuettenstadt (Abzweig),tee,50HERTZ,DE40,DE02,52.3285,14.1014,False,True,0,neighbours,
+eisenhuettenstadt,Eisenhuettenstadt,substation,50HERTZ,DE40,DE02,52.1748,14.604,False,True,0,manual,way/52983550
+eisenhuettenstadt-abzweig,Eisenhuettenstadt (Abzweig),tee,50HERTZ,DE40,DE02,52.2615,14.2191,False,True,0,neighbours,
 eiserfeld,Eiserfeld,substation,AMPRION GMBH,DEA5,DE10,50.7684,7.8641,True,False,0,neighbours,
 eller,Eller,substation,AMPRION GMBH,DEA1,DE11,51.2055,6.8476,True,False,0,name,way/1463465992
 elmenhorst,Elmenhorst,substation,AMPRION GMBH,DEA3,DE10,51.6185,7.445,True,False,0,name,way/24415232
@@ -233,7 +233,7 @@ meckenheim,Meckenheim,substation,AMPRION GMBH,DEA2,DE11,50.6178,7.0131,False,Tru
 mecklar,Mecklar,substation,TENNETGMBH,DE73,DE16,50.9176,9.746,False,True,0,name_part,way/29309786
 mehrum,Mehrum,substation,TENNETGMBH,DE91,DE09,52.3184,10.093,True,False,0,name,way/274621059
 mehrum-n,Mehrum/N,substation,TENNETGMBH,DE91,DE09,52.3186,10.0933,True,True,2,name,way/1011084707
-meissen,Meissen,substation,TENNETGMBH,DEA4,DE10,52.1931,8.9329,True,False,0,neighbours,
+meissen,Meissen,substation,TENNETGMBH,DEA4,DE10,52.2776,8.9591,True,False,0,manual,way/23135618
 meitingen,Meitingen,substation,AMPRION GMBH,DE27,DE14,48.547,10.8635,False,True,0,name,way/24652261
 mengede,Mengede,substation,AMPRION GMBH,DEA5,DE10,51.5758,7.353,False,True,0,name,way/32472806
 meppen,Meppen,substation,AMPRION GMBH,DE94,DE08,52.7534,7.2783,False,True,0,name,way/206289192
