@@ -1,0 +1,16 @@
+# MW per technology and location basis in plants_2023.csv, and the number of units.
+# Built by scripts/build_plant_table.py.
+technology,units,capacity_mw,coordinates,plant_list,municipality,postcode,district,missing
+biomass,21980,8845.6,2637.1,19.5,6177.8,0.0,11.2,0.0
+gas,67130,34577.2,3301.3,21512.9,2370.7,0.5,7391.8,0.0
+hard_coal,84,18263.3,95.1,15701.0,0.0,0.0,2467.3,0.0
+hydro,8611,4464.9,3693.8,0.0,770.2,0.6,0.3,0.0
+lignite,68,18420.6,73.2,16141.3,4.3,0.0,2201.8,0.0
+nuclear,3,4056.0,4056.0,0.0,0.0,0.0,0.0,0.0
+other_conventional,12732,11111.7,702.1,7183.7,1593.0,0.4,1632.6,0.0
+other_renewable,263,347.7,232.9,0.0,24.0,0.0,90.9,0.0
+pumped_storage,81,6368.2,6367.6,0.0,0.5,0.0,0.0,0.0
+solar,3261352,74980.3,20675.2,0.0,54103.1,167.5,34.5,0.0
+wind_offshore,1561,8444.6,8444.6,0.0,0.0,0.0,0.0,0.0
+wind_onshore,29413,59270.4,56081.5,0.0,3160.1,0.0,28.8,0.0
+total,3403278,249150.6,106360.3,60558.4,68203.7,169.0,13859.2,0.0
