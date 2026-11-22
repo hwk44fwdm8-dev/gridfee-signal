@@ -148,6 +148,33 @@ network of several hundred zones needs to fit in memory. `gridfee signal --resul
 `gridfee run`, and `gridfee validate --results <dir> --year 2023` repeats the checks (into
 `revalidation.md`).
 
+### Figures
+
+```bash
+pip install -e ".[plots]"
+gridfee plot --results results/backcast_2023 --network data/networks/de38 \
+    --regions NUTS_RG_01M_2021_4326_LEVL_2.geojson
+```
+
+`plot` reads a results directory and writes PNG files into its `plots/` folder:
+
+| file | shows |
+| --- | --- |
+| `map_signal_hours.png` | hours with a positive and with a negative signal per zone |
+| `map_mean_signal.png` | mean fee signal per zone |
+| `map_lines.png` | hours in which each line is full and has a price; unserved load per zone |
+| `timeseries_signal.png` | hours with a signal per day; mean signal per day and zone |
+| `timeseries_lines.png` | hours per day in which each priced line is full |
+| `timeseries_unserved.png` | unserved load per day and zone |
+
+`--network` must be the network the results were computed on. `--regions` is optional:
+a GeoJSON file with one outline per zone (for the 38 regions, the NUTS 2021 level-2
+file of [Eurostat GISCO](https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics),
+whose `NUTS_ID` is the zone id). Without it the zones are drawn as points. Hours with
+unserved load are not in the fee signal, so the line figures leave them out as well.
+The tables behind the figures are functions of `gridfee.plots` that need only pandas.
+The figures inherit every assumption of the run they show.
+
 A **positive** signal means that feeding in at the zone adds to congestion and taking
 power out (charging a battery) relieves it; **negative** is the reverse. Method, sign
 convention, what is observed and what is assumed: [docs/METHODOLOGY.md](docs/METHODOLOGY.md).

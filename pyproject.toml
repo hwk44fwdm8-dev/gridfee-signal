@@ -21,8 +21,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "pyarrow>=15"]
+dev = ["pytest>=8", "ruff>=0.6", "pyarrow>=15", "matplotlib>=3.8"]
 parquet = ["pyarrow>=15"]
+# For `gridfee plot` only.
+plots = ["matplotlib>=3.8"]
 # For scripts/derive_de22_network.py, derive_de38_network.py and build_population_grid.py only.
 derive = ["geopandas>=1.0", "openpyxl>=3.1"]
 # For scripts/build_capacity_factors.py only.
