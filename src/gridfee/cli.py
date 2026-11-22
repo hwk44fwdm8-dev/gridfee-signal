@@ -39,6 +39,7 @@ from gridfee.signal import (
     compute_fee_signal,
     write_signal,
 )
+from gridfee.two_run import METHODS, TWO_RUN, RedispatchCosts, TwoRunResult, run_two_run_backcast
 from gridfee.validation import (
     FAIL,
     ValidationError,
@@ -486,6 +487,22 @@ def backcast(
         help="CSV with zone_id and population per zone of the network "
         "(data/shares/de38/capacity_by_zone.csv): the weights of that mean.",
     ),
+    method: str = typer.Option(
+        "single",
+        help="'single': one run that dispatches with the line limits. 'two-run': a market "
+        "run with Germany as one price zone, then a grid run that moves plants at least "
+        "cost until no line is overloaded; also writes the modelled redispatch.",
+    ),
+    redispatch_markup: float = typer.Option(
+        1.0,
+        help="With --method two-run: EUR per MWh by which a plant is moved, paid on top of "
+        "its marginal cost when raised and kept from what it pays back when lowered.",
+    ),
+    curtailment_cost: float | None = typer.Option(
+        None,
+        help="With --method two-run: EUR per MWh of curtailed wind, solar and other feed-in "
+        "without a marginal cost. Default: the market run's price of the hour.",
+    ),
     wind_tolerance: float = typer.Option(0.10, help="Allowed deviation of the wind north share."),
     flow_tolerance: float = typer.Option(
         0.10, help="Allowed deviation of the net export per neighbour."
@@ -498,6 +515,8 @@ def backcast(
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     out = out or Path("results") / f"backcast_{year}"
     try:
+        if method not in METHODS:
+            raise BackcastError(f"--method must be one of {', '.join(METHODS)}, got {method!r}")
         network = load_network(network_dir)
         if borders_by_tso:
             network = split_borders_by_tso(
@@ -560,9 +579,24 @@ def backcast(
                     f"{len(unusable)} of the requested hours lack cross-border or generation "
                     f"data, e.g. {unusable[0]}"
                 )
-        result = run_backcast(network, inputs, subset, load_shedding_cost, threshold)
+        if method == TWO_RUN:
+            result = run_two_run_backcast(
+                network,
+                inputs,
+                subset,
+                load_shedding_cost,
+                threshold,
+                RedispatchCosts(redispatch_markup, curtailment_cost),
+            )
+        else:
+            result = run_backcast(network, inputs, subset, load_shedding_cost, threshold)
         opf = result.opf
         _write_opf(opf, out)
+        if method == TWO_RUN:
+            _write_redispatch(result, out)
+        else:
+            for name in REDISPATCH_FILES:
+                (out / f"{name}.csv").unlink(missing_ok=True)
         write_signal(result.signal, out, file_format)
         if report_zones is not None:
             if report_weights is None:
@@ -669,6 +703,25 @@ def backcast(
                 "those hours are not part of the fee signal; they are listed in "
                 "unserved_load_hours.csv."
             )
+        if method == TWO_RUN:
+            moved = result.hourly()
+            notes.append(
+                "Two-run method: flows, dispatch, prices and the fee signal are those of the "
+                "grid run that follows a market run with Germany as one price zone. Modelled "
+                f"redispatch: {moved['raised_mwh'].sum() / 1e3:,.1f} GWh raised and "
+                f"{moved['lowered_mwh'].sum() / 1e3:,.1f} GWh lowered in "
+                f"{int((moved['raised_mwh'] + moved['lowered_mwh'] > 0).sum())} hours, at "
+                f"{moved['cost_eur'].sum() / 1e6:,.2f} million EUR. ASSUMPTIONS "
+                f"(docs/METHODOLOGY.md): a moved plant gets or returns its marginal cost and "
+                f"{redispatch_markup:g} EUR/MWh on top; curtailed wind, solar and other feed-in "
+                "without a marginal cost costs "
+                + (
+                    "the market run's price of the hour"
+                    if curtailment_cost is None
+                    else f"{curtailment_cost:g} EUR/MWh"
+                )
+                + "."
+            )
         report = _validate(
             network,
             opf.flows_mw,
@@ -748,6 +801,31 @@ def _write_opf(result: OPFResult, out: Path) -> None:
     else:
         # Do not leave the shortfall of an earlier run next to these results.
         (out / "load_shedding_mw.csv").unlink(missing_ok=True)
+    for name, frame in frames.items():
+        frame.to_csv(out / f"{name}.csv")
+
+
+REDISPATCH_FILES = (
+    "market_dispatch_mw",
+    "market_price",
+    "redispatch_mw",
+    "redispatch_raised_by_zone_mw",
+    "redispatch_lowered_by_zone_mw",
+    "redispatch_hourly",
+)
+
+
+def _write_redispatch(result: TwoRunResult, out: Path) -> None:
+    raised, lowered = result.by_zone()
+    frames = {
+        "market_dispatch_mw": result.market_dispatch_mw,
+        "market_price": result.market_price.to_frame(),
+        "redispatch_mw": result.redispatch_mw,
+        "redispatch_raised_by_zone_mw": raised,
+        "redispatch_lowered_by_zone_mw": lowered,
+        "redispatch_hourly": result.hourly(),
+    }
+    assert set(frames) == set(REDISPATCH_FILES)
     for name, frame in frames.items():
         frame.to_csv(out / f"{name}.csv")
 
