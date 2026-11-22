@@ -179,6 +179,33 @@ A **positive** signal means that feeding in at the zone adds to congestion and t
 power out (charging a battery) relieves it; **negative** is the reverse. Method, sign
 convention, what is observed and what is assumed: [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
 
+## Interactive results viewer
+
+Run from the repository root in your Python environment:
+
+```bash
+python -m pip install -e ".[viewer]"
+python -m streamlit run src/gridfee/viewer.py --server.address 127.0.0.1 --browser.gatherUsageStats false
+```
+
+Open the local URL printed by Streamlit (normally <http://127.0.0.1:8501>). The
+app starts with synthetic data so you can try it without downloading data or
+running a model.
+
+To inspect a completed backcast or `run` + `signal`, stop the demo and start it
+with your results directory and the **same network used in that run**:
+
+```bash
+python -m streamlit run src/gridfee/viewer.py --server.address 127.0.0.1 --browser.gatherUsageStats false -- \
+  --results results/backcast_2023 --network data/networks/de22
+```
+
+Filter dates (Europe/Berlin) and explore the daily fee signal, zone locations,
+congested lines, and modeled unserved load. The viewer reads `fee_signal`,
+`shadow_prices`, and `flows_mw` as CSV or Parquet, plus `load_shedding_mw.csv`
+when present. It does not rerun the model, write to the run directory, or send
+your results to a hosted service. Restart it after replacing files in the run.
+
 ## Network config
 
 A network is a directory with two CSV files. Lines starting with `#` are comments.
