@@ -27,6 +27,7 @@ from gridfee.flows import OPFError, OPFResult, run_dc_opf
 from gridfee.injections import build_historical_injections, check_energy_balance, read_shares
 from gridfee.injections.weather import read_capacity_factors
 from gridfee.network import NetworkConfigError, ZoneNetwork, load_network, load_zones
+from gridfee.plots import PlotError, read_results
 from gridfee.signal import (
     NEUTRAL,
     SignalError,
@@ -375,6 +376,51 @@ def redispatch(
         f"(mean {hours.loc['signal', 'mean_redispatch_mwh']:,.0f} MWh per hour; hours "
         f"without a signal: {hours.loc['neutral', 'mean_redispatch_mwh']:,.0f}). Report in {out}"
     )
+
+
+@app.command()
+def plot(
+    results: Path = typer.Option(
+        ..., help="Directory written by `gridfee backcast`, or by `run` and `signal`."
+    ),
+    network_dir: Path = typer.Option(
+        DE22, "--network", help="Directory with zones.csv and lines.csv of that run."
+    ),
+    regions: Path | None = typer.Option(
+        None,
+        help="GeoJSON with the outline of each zone, in longitude and latitude. The maps "
+        "then show the zones as areas instead of points.",
+    ),
+    region_key: str = typer.Option("NUTS_ID", help="Property of --regions that holds the zone id."),
+    threshold: float = typer.Option(
+        DEFAULT_THRESHOLD, help="Signals and shadow prices of at most this size count as zero."
+    ),
+    out: Path | None = typer.Option(None, help="Output directory (default: plots in --results)."),
+) -> None:
+    """Maps and time series of the fee signal, full lines and unserved load, as PNG."""
+    try:
+        from gridfee.plots import figures
+    except ImportError as err:
+        typer.secho(
+            'Plots need matplotlib: pip install "gridfee-signal[plots]"',
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1) from err
+    try:
+        paths = figures.plot_results(
+            read_results(results),
+            load_network(network_dir),
+            out or results / "plots",
+            threshold,
+            None if regions is None else figures.read_regions(regions, region_key),
+        )
+    except (NetworkConfigError, PlotError, SignalError, FileNotFoundError) as err:
+        typer.secho(str(err), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from err
+    typer.echo(f"Wrote {len(paths)} figures to {paths[0].parent if paths else out}")
+    for path in paths:
+        typer.echo(f"  {path.name}")
 
 
 @app.command()
