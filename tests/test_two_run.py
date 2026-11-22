@@ -128,5 +128,9 @@ def test_cli_backcast_two_run_writes_the_redispatch_and_leaves_the_single_run_as
     signal = pd.read_csv(tmp_path / "single" / "fee_signal.csv", index_col=0)
     assert signal.iloc[1].round(6).tolist() == [30.0, -10.0]
 
+    # A single run into the directory of a two-run leaves none of its redispatch files.
+    CliRunner().invoke(app, base + [str(tmp_path / "two")])
+    assert names == sorted(path.name for path in (tmp_path / "two").iterdir())
+
     bad = CliRunner().invoke(app, base + [str(tmp_path / "bad"), "--method", "three"])
     assert bad.exit_code == 1 and "--method must be one of single, two-run" in bad.output

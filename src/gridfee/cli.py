@@ -527,6 +527,9 @@ def backcast(
         _write_opf(opf, out)
         if method == TWO_RUN:
             _write_redispatch(result, out)
+        else:
+            for name in REDISPATCH_FILES:
+                (out / f"{name}.csv").unlink(missing_ok=True)
         write_signal(result.signal, out, file_format)
         if report_zones is not None:
             if report_weights is None:
@@ -709,6 +712,16 @@ def _write_opf(result: OPFResult, out: Path) -> None:
         frame.to_csv(out / f"{name}.csv")
 
 
+REDISPATCH_FILES = (
+    "market_dispatch_mw",
+    "market_price",
+    "redispatch_mw",
+    "redispatch_raised_by_zone_mw",
+    "redispatch_lowered_by_zone_mw",
+    "redispatch_hourly",
+)
+
+
 def _write_redispatch(result: TwoRunResult, out: Path) -> None:
     raised, lowered = result.by_zone()
     frames = {
@@ -719,6 +732,7 @@ def _write_redispatch(result: TwoRunResult, out: Path) -> None:
         "redispatch_lowered_by_zone_mw": lowered,
         "redispatch_hourly": result.hourly(),
     }
+    assert set(frames) == set(REDISPATCH_FILES)
     for name, frame in frames.items():
         frame.to_csv(out / f"{name}.csv")
 
