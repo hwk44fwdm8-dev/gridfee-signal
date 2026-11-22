@@ -240,7 +240,7 @@ things ([DATA.md](DATA.md) has the sources):
 | Nuclear | 6.7 | 7.8 | 7.1 (+5 %) | 6.8 (+1 %) |
 | All other than wind and solar | 255.4 | 251.6 | 255.6 | 255.7 |
 
-The last row includes the supply of step 4 (5.2 TWh with bounds per day).
+The last row does not include the supply of step 4 (5.2 TWh with bounds per day).
 
 **How much of this agreement is the model's:** little. Steps 1 and 2 alone, as a
 merit order of the four fuels on SMARD's national series with the year's highest output
