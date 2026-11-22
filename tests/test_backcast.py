@@ -192,6 +192,17 @@ def test_backcast_solves_a_subset_of_hours():
     assert result.signal.signal.index.tolist() == [HOURS[1]]
 
 
+def test_backcast_in_blocks_of_hours_gives_the_same_signal():
+    one = run_backcast(NETWORK, _inputs(residual_cost=40.0), load_shedding_cost=1000.0)
+    blocks = run_backcast(
+        NETWORK, _inputs(residual_cost=40.0), load_shedding_cost=1000.0, block_hours=1
+    )
+
+    pd.testing.assert_frame_equal(blocks.signal.signal, one.signal.signal, atol=1e-9)
+    pd.testing.assert_frame_equal(blocks.signal.classification, one.signal.classification)
+    pd.testing.assert_frame_equal(blocks.opf.shadow_prices, one.opf.shadow_prices, atol=1e-9)
+
+
 def _write_tables(directory: Path) -> None:
     directory.mkdir()
     tables = {
@@ -238,6 +249,20 @@ def test_cli_backcast_runs_end_to_end(tmp_path):
     assert "| wind north share | north = 50Hertz + TenneT | 100.0% | 100.0% |" in report
     assert "**FAIL**" in report and "ASSUMPTION" in report
     assert pd.read_csv(out / "clipped_exchange.csv")["clipped_mwh"].tolist() == [30.0]
+
+    # In blocks of hours, in two processes: the same files.
+    blocks = CliRunner().invoke(
+        app,
+        ["backcast", "--year", "2023", "--network", str(tmp_path / "net"), "--data"]
+        + [str(tmp_path / "raw"), "--residual-cost", "40", "--out", str(tmp_path / "blocks")]
+        + ["--block-hours", "1", "--workers", "2"],
+    )
+    assert blocks.exit_code == 1, blocks.output
+    for name in ("fee_signal.csv", "fee_signal_class.csv"):
+        pd.testing.assert_frame_equal(
+            pd.read_csv(tmp_path / "blocks" / name, index_col=0),
+            pd.read_csv(out / name, index_col=0),
+        )
 
     # validate and signal reproduce their parts from the written results.
     again = CliRunner().invoke(

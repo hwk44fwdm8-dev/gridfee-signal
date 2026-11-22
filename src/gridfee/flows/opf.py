@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import warnings
 from collections.abc import Iterable, Mapping
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 
 import pandas as pd
@@ -91,6 +93,8 @@ def run_dc_opf(
     marginal_cost: pd.DataFrame | None = None,
     load_shedding_cost: float | None = None,
     ptdf_reference: str | Mapping[str, float] | None = None,
+    block_hours: int | None = None,
+    workers: int = 1,
 ) -> OPFResult:
     """Minimise generation cost subject to zonal balances and line capacities.
 
@@ -109,7 +113,18 @@ def run_dc_opf(
     load_shedding_cost: if set, load can be left unserved at this cost in EUR/MWh,
         which keeps the problem feasible. If None, an infeasible hour raises OPFError.
     ptdf_reference: passed to :func:`gridfee.flows.ptdf.compute_ptdf`.
+    block_hours: solve the snapshots in blocks of this many instead of as one
+        problem (the default). Time and memory of one problem grow with its number
+        of snapshots times the size of the network, and a year on several hundred
+        zones does not fit in memory. The hours are independent, so the cost and the
+        shadow prices are the same up to the solver's tolerance; where an hour has
+        more than one cheapest dispatch, the one reported may differ.
+    workers: processes that solve the blocks side by side.
     """
+    if block_hours is not None and block_hours < 1:
+        raise OPFError("block_hours must be at least 1")
+    if workers < 1:
+        raise OPFError("workers must be at least 1")
     load_mw, generators, availability = _validate_inputs(
         network, load_mw, generators, availability, snapshots
     )
@@ -131,8 +146,62 @@ def run_dc_opf(
         if marginal_cost.isna().any().any():
             raise OPFError("marginal_cost has gaps")
 
+    step = len(index) if block_hours is None else block_hours
+    blocks = [
+        (
+            network,
+            load_mw.iloc[start : start + step],
+            generators,
+            None if availability is None else availability.iloc[start : start + step],
+            None if marginal_cost is None else marginal_cost.iloc[start : start + step],
+            load_shedding_cost,
+        )
+        for start in range(0, len(index), step)
+    ]
+    if workers > 1 and len(blocks) > 1:
+        # Not forked: a fork after a solve in this process inherits the solver's
+        # threads in a state in which the next solve does not return.
+        spawn = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(min(workers, len(blocks)), mp_context=spawn) as pool:
+            solved = list(pool.map(_solve_block, blocks))
+    else:
+        solved = [_solve_block(block) for block in blocks]
+
+    def named(position: int, columns_name: str) -> pd.DataFrame:
+        frames = [block[position] for block in solved]
+        frame = frames[0] if len(frames) == 1 else pd.concat(frames)
+        # "+ 0.0" turns the solver's -0.0 into 0.0
+        frame = frame.set_axis(index.rename("snapshot")).rename_axis(columns=columns_name)
+        return frame + 0.0
+
+    return OPFResult(
+        flows_mw=named(0, "line_id"),
+        shadow_prices=named(1, "line_id"),
+        nodal_prices=named(2, "zone_id"),
+        dispatch_mw=named(3, "generator_id"),
+        load_shedding_mw=None if load_shedding_cost is None else named(4, "zone_id"),
+        ptdf=compute_ptdf(network, ptdf_reference),
+        objective_eur=float(sum(block[5] for block in solved)),
+    )
+
+
+def _solve_block(
+    block: tuple[
+        ZoneNetwork,
+        pd.DataFrame,
+        pd.DataFrame,
+        pd.DataFrame | None,
+        pd.DataFrame | None,
+        float | None,
+    ],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame | None, float]:
+    """Solve the validated snapshots of one block as one problem.
+
+    Returns flows, shadow prices, nodal prices, dispatch, load shedding and the cost.
+    """
+    network, load_mw, generators, availability, marginal_cost, load_shedding_cost = block
     n = build_pypsa_network(network)
-    n.set_snapshots(positions)
+    n.set_snapshots(load_mw.index)
     n.add("Load", load_mw.columns, bus=load_mw.columns, p_set=load_mw)
     n.add(
         "Generator",
@@ -177,21 +246,15 @@ def run_dc_opf(
     mu_upper = n.lines_t.mu_upper.reindex(columns=line_ids, fill_value=0.0)
     mu_lower = n.lines_t.mu_lower.reindex(columns=line_ids, fill_value=0.0)
 
-    def named(frame: pd.DataFrame, columns_name: str) -> pd.DataFrame:
-        # "+ 0.0" turns the solver's -0.0 into 0.0
-        frame = frame.set_axis(index.rename("snapshot")).rename_axis(columns=columns_name)
-        return frame + 0.0
-
-    return OPFResult(
-        flows_mw=named(n.lines_t.p0.reindex(columns=line_ids, fill_value=0.0), "line_id"),
+    return (
+        n.lines_t.p0.reindex(columns=line_ids, fill_value=0.0),
         # PyPSA reports the raw duals of the cost minimisation: mu_upper <= 0 for
         # flow <= capacity and mu_lower >= 0 for flow >= -capacity.
-        shadow_prices=named(-(mu_upper + mu_lower), "line_id"),
-        nodal_prices=named(n.buses_t.marginal_price[network.zone_ids], "zone_id"),
-        dispatch_mw=named(dispatch.loc[:, ~is_shedding], "generator_id"),
-        load_shedding_mw=None if load_shedding is None else named(load_shedding, "zone_id"),
-        ptdf=compute_ptdf(network, ptdf_reference),
-        objective_eur=float(n.objective),
+        -(mu_upper + mu_lower),
+        n.buses_t.marginal_price[network.zone_ids],
+        dispatch.loc[:, ~is_shedding],
+        load_shedding,
+        float(n.objective),
     )
 
 
