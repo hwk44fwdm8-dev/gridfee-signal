@@ -155,6 +155,8 @@ def main() -> None:
             "use an empty directory"
         )
     marker.write_text(f"{args.source}\n", encoding="utf-8")
+    done = args.out / "COMPLETE.txt"
+    done.unlink(missing_ok=True)
     with open_export(args.source) as export:
         names = sorted(
             (name for name in export.namelist() if MEMBERS.match(name)),
@@ -162,6 +164,8 @@ def main() -> None:
         )
     with ThreadPoolExecutor(args.workers) as pool:
         list(pool.map(lambda name: extract_member(args.source, name, args.out), names))
+    # Only written once every file is there; build_zone_shares.py asks for it.
+    done.write_text("".join(f"{name}\n" for name in names), encoding="utf-8")
 
 
 if __name__ == "__main__":

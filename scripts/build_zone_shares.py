@@ -94,6 +94,10 @@ def main() -> None:
     parser.add_argument("--population-year", type=int, default=2023, help="1 January of.")
     args = parser.parse_args()
 
+    if not (args.mastr / "COMPLETE.txt").exists():
+        raise SystemExit(
+            f"{args.mastr} is not a finished extraction; run scripts/extract_mastr.py again"
+        )
     zones = load_zones(DE22 / "zones.csv")
     regions = pd.read_csv(DE22 / "zone_nuts2.csv", comment="#").set_index("nuts2")["zone_id"]
     prefixes = pd.read_csv(SHARES / "ags_nuts2.csv", comment="#", dtype=str)
