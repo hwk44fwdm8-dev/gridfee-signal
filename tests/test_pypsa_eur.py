@@ -151,17 +151,3 @@ def test_published_limits_for_an_unknown_line_are_rejected():
     circuits = pd.DataFrame({"line_id": ["A-X"], "voltage_kv": [380], "max_current_a": [1]})
     with pytest.raises(ValueError, match="A-X"):
         apply_published_limits(zone_lines, circuits)
-
-
-def test_the_de22_lines_listed_in_jao_circuits_carry_the_published_limits():
-    from pathlib import Path
-
-    network = Path(__file__).parents[1] / "data" / "networks" / "de22"
-    circuits = pd.read_csv(network / "jao_circuits.csv", comment="#")
-    lines = pd.read_csv(network / "lines.csv", comment="#").set_index("line_id")
-    mva = np.sqrt(3) * circuits["voltage_kv"] * circuits["max_current_a"] / 1000
-    expected = 0.7 * mva.groupby(circuits["line_id"]).sum()
-    assert len(expected) == 4
-    assert lines.loc[expected.index, "capacity_mw"].to_numpy() == pytest.approx(
-        expected.to_numpy(), abs=0.06
-    )

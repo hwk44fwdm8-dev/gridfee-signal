@@ -31,15 +31,15 @@ comes largely from the observed bounds, and the costs and line capacities remain
 assumptions. 70 further hours have unserved load; their prices reflect the model's
 penalty and not data, so they are kept out of the signal and listed apart
 ([docs/METHODOLOGY.md](docs/METHODOLOGY.md)).
-Those figures are with estimated ratings for every line. With the maximum currents
-that JAO publishes for the four priced lines (now in `data/networks/de22/lines.csv`),
-the signal is not neutral in 21 hours (0.2 %) and no hour has unserved load.
 
-On the 38 NUTS2 regions with published limits on every line (`data/networks/de38`) the
-signal is not neutral in 1,007 hours (12 %), which hold 30 % of the redispatch
-volume of the hours solved; three weak lines carry most of it and 386 hours have unserved load. The signal
-is also written for the 22 zones (`--report-zones`), where it averages over regions
-that often have opposite signs.
+**What is not in this repository.** Networks built from the line limits that the TSOs
+publish through JAO's Core Static Grid Model, and every result computed on them, are
+kept in a private repository ([gridfee-signal-private](https://github.com/hwk44fwdm8-dev/gridfee-signal-private)):
+JAO's terms of use do not allow passing on its data or anything derived from it. Here,
+`data/networks/de22` and `data/networks/de38` (the 38 NUTS2 regions) carry lines
+estimated from OpenStreetMap-based data only. The scripts that read JAO's files
+(`scripts/derive_de38_network.py`, `scripts/derive_desub_substations.py`) stay here as
+code; they need JAO's workbook and map and the private repository's data files.
 
 ## Quick start
 
@@ -255,9 +255,8 @@ from PyPSA-Eur.
 
 - The 22-zone lines are an assumption derived from OpenStreetMap-based data, and DC
   cables are treated as lines; see [docs/NETWORK.md](docs/NETWORK.md).
-- The 38-region lines use published currents and reactances, but where each substation
-  is, the 0.7 margin and one line per pair of regions are assumptions; single weak
-  circuits then decide much of the result.
+- The 38-region lines are derived the same way and have not been used for a backcast
+  that is documented here.
 - The backcast is not a market model, and its zone shares are placeholders unless the
   files in `data/shares/` are passed; see
   [docs/METHODOLOGY.md](docs/METHODOLOGY.md).

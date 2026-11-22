@@ -165,20 +165,3 @@ def test_place_on_substations_keeps_a_cell_in_its_own_region() -> None:
 def test_place_on_substations_needs_a_substation_in_every_region() -> None:
     with pytest.raises(PopulationGridError, match="no substation.*DE30"):
         place_on_substations(GRID, SUBSTATIONS.iloc[:3], pd.Series({"DE11": 1.0, "DE30": 1.0}))
-
-
-def test_shipped_load_shares_keep_the_eurostat_population_per_region() -> None:
-    desub = ROOT / "data" / "networks" / "desub"
-    listed = pd.read_csv(desub / "substations.csv", comment="#")
-    shares = pd.read_csv(desub / "load_shares.csv", comment="#")
-    substations = listed[listed["kind"] == "substation"]
-
-    assert shares["substation_id"].tolist() == substations["substation_id"].tolist()
-    assert shares["nuts2"].tolist() == substations["nuts2"].tolist()
-    assert shares["load_share"].sum() == pytest.approx(1.0, abs=1e-6)
-    per_region = shares.groupby("nuts2")["population"].sum()
-    assert (per_region - eurostat_2023()).abs().max() < 1.0
-    rebuilt = place_on_substations(
-        load_population_grid(POPULATION / "population_1km.csv.gz"), substations, eurostat_2023()
-    )
-    assert shares["load_share"].to_numpy() == pytest.approx(rebuilt["load_share"], abs=1e-8)

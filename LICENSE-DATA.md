@@ -11,26 +11,24 @@ licensed under the [Open Database License (ODbL) 1.0](https://opendatacommons.or
 Contains information from OpenStreetMap, © OpenStreetMap contributors. These derived
 files are made available under the ODbL as well.
 
-The rating of four lines uses the maximum currents of the circuits listed in
-`jao_circuits.csv`, quoted from JAO's Core Static Grid Model, 3rd release
-(<https://www.jao.eu/static-grid-model>, © JAO and the Core TSOs, not under an open
-licence; the workbook itself is not included).
-
 The assignment of buses to zones used NUTS 2021 boundaries from Eurostat GISCO
 (© EuroGeographics for the administrative boundaries). No boundary data is included
 in this repository.
 
 ## `data/networks/de38/`
 
-`lines.csv` and `lines_parts.csv` are computed from JAO's Core Static Grid Model,
-3rd release (<https://www.jao.eu/static-grid-model>, © JAO and the Core TSOs, not under
-an open licence): per pair of regions, the summed rating and the combined reactance of
-the circuits between them. The workbook and the map are not included, and the files do
-not repeat a circuit's current or reactance. `jao_circuits.csv` names the circuits by
-their EIC code, and `jao_places.csv` and `jao_corrections.csv` name substations and
-circuits as the workbook does. The ratings of the DC links and the coordinates in
-`zones.csv` are derived from PyPSA-Eur's OpenStreetMap network as for `de22` (ODbL 1.0,
-© OpenStreetMap contributors). Region names and codes: NUTS 2021, Eurostat.
+`lines.csv`, `lines_parts.csv` and the coordinates in `zones.csv` are derived from
+PyPSA-Eur's OpenStreetMap network as for `de22` (ODbL 1.0, © OpenStreetMap
+contributors). Region names and codes: NUTS 2021, Eurostat.
+
+## Not included: JAO's Core Static Grid Model
+
+Nothing in this repository is taken from or computed with JAO's Core Static Grid Model
+(<https://www.jao.eu/static-grid-model>, © JAO and the Core TSOs, not under an open
+licence; its terms of use bar passing on the data and anything derived from it).
+Networks built from it and results computed on them are kept in a private repository.
+Commits before the split of November 2026 still contain such files; they are not part
+of the current tree and are not offered under any licence here.
 
 ## SMARD
 
@@ -58,10 +56,6 @@ NUTS 2021 boundaries from Eurostat GISCO (© EuroGeographics for the administrat
 boundaries; no boundary data is included). `nuts2_check.csv` also quotes Eurostat's
 table `demo_r_d2jan` (© European Union; Eurostat data may be reused with the source
 named).
-
-`data/networks/desub/load_shares.csv` is derived from `population_1km.csv.gz` (as above)
-and from the substation positions of `data/networks/desub/substations.csv`, which are
-OpenStreetMap's (© OpenStreetMap contributors, ODbL 1.0).
 
 ## `data/costs/`
 

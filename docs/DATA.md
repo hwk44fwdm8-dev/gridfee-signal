@@ -276,9 +276,11 @@ single unit.
 
 ## Load share per substation (ASSUMPTION: load follows population)
 
-`data/networks/desub/load_shares.csv` gives every substation of
-`data/networks/desub/substations.csv` its share of German load: `substation_id`,
-`nuts2`, `population` and `load_share` (sums to 1). Rebuild it from the list with:
+`scripts/build_substation_load.py` gives every substation of a list (`substation_id`,
+`kind`, `nuts2`, `lat`, `lon`) its share of German load and writes `substation_id`,
+`nuts2`, `population` and `load_share` (sums to 1). The substation list of this project
+is built from JAO's Core Static Grid Model and is kept with its load shares in the
+private repository (see [NETWORK.md](NETWORK.md)); in a checkout of it:
 
 ```bash
 python scripts/build_substation_load.py
@@ -291,16 +293,15 @@ python scripts/build_substation_load.py
   1 January 2023 (`reference` in `nuts2_check.csv`). `population` summed per `nuts2` is
   therefore exactly the Eurostat figure, and the load of a region is the same as with
   the population shares of the 38-region network.
-- Substations at the same position (6 pairs in the list) share its cells equally. Tee
-  points carry no load and are not in the file. A substation that no cell is nearest to
-  has share 0 (`gkm`).
+- Substations at the same position share its cells equally. Tee points carry no load
+  and are not in the file. A substation that no cell is nearest to has share 0.
 - The attachment is to the substation, not to a bus or voltage level.
 
 **Limits.** Distance is the straight line to the transmission substation; the
 distribution grid in between is not looked at. Positions are those of the list, with
 its caveats (name matches not checked one by one, some placed at the mean of their
-neighbours). Regions with one substation put their whole load there (Hamburg: 2.2 % of
-Germany on `hamburg-sued`). Industry is not distinguished from households.
+neighbours). Regions with one substation put their whole load there. Industry is not
+distinguished from households.
 
 ## Generation costs per fuel (ASSUMPTION)
 

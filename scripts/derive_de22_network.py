@@ -102,9 +102,11 @@ def main() -> None:
     buses, lines, links = read_prebuilt_network(args.osm)
     busmap = build_busmap(buses, lines, links, args.nuts, NETWORK_DIR)
     zone_lines, centres = derive_zone_lines(buses, lines, links, busmap)
-    # de22 lists the currents of four lines; de38's own listing belongs to
-    # derive_de38_network.py, and this script then writes the OpenStreetMap version.
-    if args.network == "de22":
+    # A de22 directory with jao_circuits.csv (the private repository's) lists the
+    # currents of four lines. de38's own listing belongs to derive_de38_network.py,
+    # and this script then writes the OpenStreetMap version.
+    limited = args.network == "de22" and (NETWORK_DIR / "jao_circuits.csv").exists()
+    if limited:
         circuits = pd.read_csv(NETWORK_DIR / "jao_circuits.csv", comment="#")
         zone_lines = apply_published_limits(zone_lines, circuits)
 
@@ -134,7 +136,7 @@ def main() -> None:
     zone_lines["susceptance_mw_per_rad"] = zone_lines["susceptance_mw_per_rad"].round(1)
     zone_lines["capacity_mw"] = zone_lines["capacity_mw"].round(1)
     with (NETWORK_DIR / "lines.csv").open("w", newline="", encoding="utf-8") as file:
-        file.write(LINES_HEADER)
+        file.write(LINES_HEADER.format(limits=PUBLISHED_LIMITS if limited else ""))
         zone_lines[list(LINE_COLUMNS)].to_csv(file, index=False)
     parts = zone_lines[["line_id", "ac_rating_mva", "dc_rating_mw"]].round(1)
     parts.to_csv(NETWORK_DIR / "lines_parts.csv", index=False)
@@ -146,9 +148,11 @@ LINES_HEADER = """\
 # scripts/derive_de22_network.py from PyPSA-Eur's prebuilt electricity network 0.8
 # (OpenStreetMap data, 220 kV and above, in service). See docs/NETWORK.md.
 # capacity_mw = 0.7 x summed thermal rating of the AC lines + rating of DC links.
+{limits}# Data licence: ODbL 1.0, (c) OpenStreetMap contributors; see LICENSE-DATA.md.
+"""
+PUBLISHED_LIMITS = """\
 # The four lines in jao_circuits.csv take their rating from the maximum currents
 # that JAO's Core Static Grid Model publishes; the 0.7 stays an assumption.
-# Data licence: ODbL 1.0, (c) OpenStreetMap contributors; see LICENSE-DATA.md.
 """
 
 if __name__ == "__main__":
