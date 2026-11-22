@@ -29,7 +29,7 @@ from gridfee.network.pypsa_eur import (
     read_prebuilt_network,
 )
 
-NETWORK_DIR = Path(__file__).parents[1] / "data" / "networks" / "de22"
+NETWORKS = Path(__file__).parents[1] / "data" / "networks"
 # Denmark is two bidding zones, which SMARD reports separately. Buses west of the
 # Great Belt (this longitude) are DK1, the others DK2.
 DK_SPLIT_LONGITUDE = 10.9
@@ -55,9 +55,11 @@ def read_commented_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, comment="#", dtype=str)
 
 
-def build_busmap(buses: pd.DataFrame, lines, links, nuts_file: Path) -> pd.Series:
+def build_busmap(
+    buses: pd.DataFrame, lines, links, nuts_file: Path, network_dir: Path = NETWORKS / "de22"
+) -> pd.Series:
     """Map German buses to zones by NUTS2 region and border buses to neighbour areas."""
-    zone_of_nuts = read_commented_csv(NETWORK_DIR / "zone_nuts2.csv").set_index("nuts2")["zone_id"]
+    zone_of_nuts = read_commented_csv(network_dir / "zone_nuts2.csv").set_index("nuts2")["zone_id"]
     regions = gpd.read_file(nuts_file).set_index("NUTS_ID")
     regions = regions.loc[zone_of_nuts.index, ["geometry"]]
 
@@ -91,13 +93,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--osm", type=Path, required=True)
     parser.add_argument("--nuts", type=Path, required=True)
+    parser.add_argument(
+        "--network", default="de22", choices=["de22", "de38"], help="Network to rebuild."
+    )
     args = parser.parse_args()
+    NETWORK_DIR = NETWORKS / args.network
 
     buses, lines, links = read_prebuilt_network(args.osm)
-    busmap = build_busmap(buses, lines, links, args.nuts)
+    busmap = build_busmap(buses, lines, links, args.nuts, NETWORK_DIR)
     zone_lines, centres = derive_zone_lines(buses, lines, links, busmap)
-    circuits = pd.read_csv(NETWORK_DIR / "jao_circuits.csv", comment="#")
-    zone_lines = apply_published_limits(zone_lines, circuits)
+    if (NETWORK_DIR / "jao_circuits.csv").exists():
+        circuits = pd.read_csv(NETWORK_DIR / "jao_circuits.csv", comment="#")
+        zone_lines = apply_published_limits(zone_lines, circuits)
 
     zones = read_commented_csv(NETWORK_DIR / "zones.csv")
     zones = zones[zones["kind"] == "internal"].reindex(

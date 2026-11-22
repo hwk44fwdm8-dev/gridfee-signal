@@ -88,6 +88,37 @@ def compute_fee_signal(
     return FeeSignal(signal, classify_signal(signal, threshold), threshold)
 
 
+def aggregate_signal(result: FeeSignal, groups: pd.DataFrame) -> FeeSignal:
+    """Fee signal of reporting zones that are each made of several solved zones.
+
+    ``groups`` has one row per solved zone: ``zone_id``, ``report_zone`` and
+    ``weight`` (> 0). The signal of a reporting zone is the weighted mean of the
+    signals of its zones, hour by hour, classified with the same threshold. Zones
+    that ``groups`` does not list (the boundary zones) are passed through.
+
+    The mean hides differences inside a reporting zone: when a line between two of
+    its zones is congested, their signals have opposite signs and the mean is
+    closer to zero than either.
+    """
+    if groups["zone_id"].duplicated().any():
+        raise SignalError("a zone is listed twice in the reporting groups")
+    unknown = sorted(set(groups["zone_id"]) - set(result.signal.columns))
+    if unknown:
+        raise SignalError(f"reporting groups name zones without a signal: {unknown}")
+    if not (groups["weight"] > 0).all():
+        raise SignalError("weights of the reporting groups must be positive")
+    grouped = groups.set_index("zone_id")
+    weights = grouped["weight"] / grouped.groupby("report_zone")["weight"].transform("sum")
+    weighted = result.signal[grouped.index] * weights
+    report = weighted.T.groupby(grouped["report_zone"]).sum().T
+    others = result.signal.drop(columns=grouped.index)
+    overlap = sorted(set(report.columns) & set(others.columns))
+    if overlap:
+        raise SignalError(f"reporting zones named like zones that are passed through: {overlap}")
+    signal = pd.concat([report, others], axis=1).rename_axis(columns="zone_id")
+    return FeeSignal(signal, classify_signal(signal, result.threshold), result.threshold)
+
+
 def classify_signal(signal: pd.DataFrame, threshold: float = 0.0) -> pd.DataFrame:
     """Label each value positive (> threshold), negative (< -threshold) or neutral.
 
@@ -101,18 +132,20 @@ def classify_signal(signal: pd.DataFrame, threshold: float = 0.0) -> pd.DataFram
     return labels
 
 
-def write_signal(result: FeeSignal, out_dir: str | Path, file_format: str = "csv") -> list[Path]:
+def write_signal(
+    result: FeeSignal, out_dir: str | Path, file_format: str = "csv", stem: str = "fee_signal"
+) -> list[Path]:
     """Write ``fee_signal``, ``fee_signal_class`` and ``fee_signal_summary``.
 
     ``file_format`` is ``csv`` or ``parquet`` (needs pyarrow); the summary is
-    always a CSV.
+    always a CSV. ``stem`` replaces ``fee_signal`` in the three file names.
     """
     if file_format not in ("csv", "parquet"):
         raise SignalError(f"format must be 'csv' or 'parquet', got {file_format!r}")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
-    for name, frame in (("fee_signal", result.signal), ("fee_signal_class", result.classification)):
+    for name, frame in ((stem, result.signal), (f"{stem}_class", result.classification)):
         path = out_dir / f"{name}.{file_format}"
         if file_format == "csv":
             frame.to_csv(path)
@@ -124,6 +157,6 @@ def write_signal(result: FeeSignal, out_dir: str | Path, file_format: str = "csv
                     'Parquet output needs pyarrow: pip install "gridfee-signal[parquet]"'
                 ) from err
         paths.append(path)
-    summary = out_dir / "fee_signal_summary.csv"
+    summary = out_dir / f"{stem}_summary.csv"
     result.summary().to_csv(summary)
     return [*paths, summary]

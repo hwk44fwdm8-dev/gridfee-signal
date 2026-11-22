@@ -80,8 +80,8 @@ def by_zone(units: pd.DataFrame, zone: pd.Series, column: str, what: str) -> pd.
     return units.loc[~missing, column].groupby(zone[~missing]).sum()
 
 
-def offshore_zone(units: pd.DataFrame, catalogue: pd.Series) -> pd.Series:
-    landing = pd.read_csv(SHARES / "offshore_landing.csv", comment="#")
+def offshore_zone(units: pd.DataFrame, catalogue: pd.Series, shares: Path) -> pd.Series:
+    landing = pd.read_csv(shares / "offshore_landing.csv", comment="#")
     sea = units["Seelage"].map(catalogue)
     area = (
         units["GebietNachDemFlaechenentwicklungsplanNordsee"]
@@ -108,14 +108,24 @@ def main() -> None:
     parser.add_argument("--mastr", required=True, type=Path, help="Output of extract_mastr.py.")
     parser.add_argument("--date", default="2023-07-01", help="Units in operation on this day.")
     parser.add_argument("--population-year", type=int, default=2023, help="1 January of.")
+    parser.add_argument(
+        "--network", type=Path, default=DE22, help="Network directory with zone_nuts2.csv."
+    )
+    parser.add_argument(
+        "--shares",
+        type=Path,
+        default=SHARES,
+        help="Directory to write to; it must hold the network's offshore_landing.csv.",
+    )
     args = parser.parse_args()
+    network, shares_dir = args.network, args.shares
 
     if not (args.mastr / "COMPLETE.txt").exists():
         raise SystemExit(
             f"{args.mastr} is not a finished extraction; run scripts/extract_mastr.py again"
         )
-    zones = load_zones(DE22 / "zones.csv")
-    regions = pd.read_csv(DE22 / "zone_nuts2.csv", comment="#").set_index("nuts2")["zone_id"]
+    zones = load_zones(network / "zones.csv")
+    regions = pd.read_csv(network / "zone_nuts2.csv", comment="#").set_index("nuts2")["zone_id"]
     prefixes = pd.read_csv(SHARES / "ags_nuts2.csv", comment="#", dtype=str)
     prefix_to_zone = dict(zip(prefixes["ags_prefix"], prefixes["nuts2"].map(regions), strict=True))
     source = (args.mastr / "SOURCE.txt").read_text(encoding="utf-8").strip()
@@ -127,7 +137,7 @@ def main() -> None:
     population = pd.read_csv(io.StringIO(response.text)).set_index("geo")["OBS_VALUE"]
     per_zone = population.reindex(regions.index).groupby(regions).sum(min_count=1)
     write(
-        SHARES / "population_shares.csv",
+        shares_dir / "population_shares.csv",
         [
             "Share of each zone in the population of its TSO zone (zones.csv).",
             f"Source: Eurostat demo_r_d2jan, NUTS2, 1 January {args.population_year}.",
@@ -152,7 +162,10 @@ def main() -> None:
             "wind_onshore",
         ),
         "wind_offshore": by_zone(
-            offshore, offshore_zone(offshore, catalogue), "Bruttoleistung", "wind_offshore"
+            offshore,
+            offshore_zone(offshore, catalogue, shares_dir),
+            "Bruttoleistung",
+            "wind_offshore",
         ),
         "solar": by_zone(
             solar,
@@ -165,7 +178,7 @@ def main() -> None:
         [shares_within_tso(mw, zones).assign(technology=tech) for tech, mw in capacity.items()]
     )
     write(
-        SHARES / "capacity_shares.csv",
+        shares_dir / "capacity_shares.csv",
         [
             "Share of each zone in the installed capacity of its TSO zone (zones.csv).",
             f"Source: {mastr_note}; gross capacity.",
@@ -191,7 +204,7 @@ def main() -> None:
         print(f"districts found in several zones, not used: {ambiguous}")
     capacity["other"] = by_zone(other, zone, "Nettonennleistung", "other generation")
     write(
-        SHARES / "residual_shares.csv",
+        shares_dir / "residual_shares.csv",
         [
             "Share of each zone in Germany's capacity other than wind and solar.",
             f"Source: {mastr_note}; net capacity of",
@@ -242,7 +255,7 @@ def main() -> None:
         [national_shares(mw, zones).assign(technology=fuel) for fuel, mw in fuel_capacity.items()]
     )
     write(
-        SHARES / "generation_shares.csv",
+        shares_dir / "generation_shares.csv",
         [
             "Share of each zone in Germany's capacity per fuel, for SMARD's national",
             "generation series other than wind and solar.",
@@ -263,7 +276,7 @@ def main() -> None:
     table = pd.DataFrame(capacity).reindex([z.zone_id for z in zones if z.tso_zone]).fillna(0.0)
     table.insert(0, "population", per_zone)
     write(
-        SHARES / "capacity_by_zone.csv",
+        shares_dir / "capacity_by_zone.csv",
         [f"Population (Eurostat, 1 January {args.population_year}) and MW per zone.", mastr_note],
         table.round(1).rename_axis("zone_id").reset_index(),
     )

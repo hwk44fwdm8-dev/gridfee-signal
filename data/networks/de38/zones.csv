@@ -1,0 +1,56 @@
+# The 38 NUTS2 regions of Germany (NUTS 2021 codes and names, Eurostat GISCO) as zones.
+# zone_id is the NUTS2 code, so DE11 here is Stuttgart, not zone DE11 of the 22-zone
+# network. tso_zone is that of the region's zone in ../de22/zones.csv (zone_de22.csv).
+# The boundary zones and all coordinates are written by scripts/derive_de22_network.py
+# (mean position of the PyPSA-Eur buses of the zone); see docs/NETWORK.md.
+zone_id,name,kind,tso_zone,country,lat,lon
+DE11,Stuttgart,internal,TransnetBW,,48.883,9.334
+DE12,Karlsruhe,internal,TransnetBW,,49.194,8.617
+DE13,Freiburg,internal,TransnetBW,,47.903,8.143
+DE14,Tübingen,internal,TransnetBW,,48.151,9.542
+DE21,Oberbayern,internal,TenneT,,48.22,11.636
+DE22,Niederbayern,internal,TenneT,,48.531,12.824
+DE23,Oberpfalz,internal,TenneT,,49.322,12.106
+DE24,Oberfranken,internal,TenneT,,50.097,11.506
+DE25,Mittelfranken,internal,TenneT,,49.427,10.997
+DE26,Unterfranken,internal,TenneT,,49.918,9.853
+DE27,Schwaben,internal,TenneT,,48.208,10.389
+DE30,Berlin,internal,50Hertz,,52.552,13.414
+DE40,Brandenburg,internal,50Hertz,,52.551,13.39
+DE50,Bremen,internal,TenneT,,53.134,8.677
+DE60,Hamburg,internal,TenneT,,53.489,9.929
+DE71,Darmstadt,internal,TenneT,,49.959,8.613
+DE72,Gießen,internal,TenneT,,50.572,8.342
+DE73,Kassel,internal,TenneT,,51.129,9.325
+DE80,Mecklenburg-Vorpommern,internal,50Hertz,,53.934,12.891
+DE91,Braunschweig,internal,TenneT,,52.123,10.306
+DE92,Hannover,internal,TenneT,,52.423,9.346
+DE93,Lüneburg,internal,TenneT,,53.344,9.504
+DE94,Weser-Ems,internal,TenneT,,53.046,7.911
+DEA1,Düsseldorf,internal,Amprion,,51.385,6.733
+DEA2,Köln,internal,Amprion,,50.884,6.809
+DEA3,Münster,internal,Amprion,,51.822,7.289
+DEA4,Detmold,internal,Amprion,,52.034,8.79
+DEA5,Arnsberg,internal,Amprion,,51.423,7.574
+DEB1,Koblenz,internal,Amprion,,50.474,7.566
+DEB2,Trier,internal,Amprion,,49.877,6.634
+DEB3,Rheinhessen-Pfalz,internal,Amprion,,49.422,8.223
+DEC0,Saarland,internal,Amprion,,49.336,6.973
+DED2,Dresden,internal,50Hertz,,51.274,14.278
+DED4,Chemnitz,internal,50Hertz,,50.737,12.789
+DED5,Leipzig,internal,50Hertz,,51.19,12.464
+DEE0,Sachsen-Anhalt,internal,50Hertz,,52.012,11.866
+DEF0,Schleswig-Holstein,internal,TenneT,,54.135,9.644
+DEG0,Thüringen,internal,50Hertz,,50.835,11.445
+AT,Austria,boundary,,AT,47.578,11.272
+BE,Belgium,boundary,,BE,50.753,5.668
+CH,Switzerland,boundary,,CH,47.551,8.064
+CZ,Czechia,boundary,,CZ,50.155,13.29
+DK1,Denmark West,boundary,,DK,54.974,9.096
+DK2,Denmark East,boundary,,DK,55.45,12.008
+FR,France,boundary,,FR,48.692,6.877
+LU,Luxembourg,boundary,,LU,49.842,6.144
+NL,Netherlands,boundary,,NL,52.126,6.47
+NO2,Norway (NO2),boundary,,NO,58.669,6.754
+PL,Poland,boundary,,PL,52.144,14.795
+SE4,Sweden (SE4),boundary,,SE,55.501,13.146

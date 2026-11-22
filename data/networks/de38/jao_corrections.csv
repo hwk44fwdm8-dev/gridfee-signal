@@ -1,0 +1,14 @@
+# Circuits whose two ends the workbook names in a way that puts them in the wrong
+# place, with the ends scripts/derive_de38_network.py uses instead.
+# The three rows are the legs of one tee (Bergshausen, Sandershausen/O, Wuergassen),
+# as their names say. The workbook calls the tee point "Wuergassen" too, so that the
+# 0.02 km leg would put Wuergassen (Nordrhein-Westfalen) at Sandershausen near Kassel
+# and the 45 km leg would run from Wuergassen to itself.
+# The last row is a tie line that Amprion lists first and without the "Y-" form of
+# name: its tee point is the one of TenneT's circuit EOWS ("Y-Niederlangen
+# (-Doerpen/W - Meppen) EOWS"), which the script names "Y-Niederlangen [EOWS]".
+eic,sub1,sub2,basis
+11T0-0000-1073-M,Bergshausen,Y-Sandershausen/O,name "Y-Bergshausen (-Sandershausen/O - Wuergassen) 2"
+11T0-0000-1072-P,Sandershausen/O,Y-Sandershausen/O,name "Y-Sandershausen/O (-Bergshausen - Wuergassen) 2"
+11T0-0000-1071-S,Wuergassen,Y-Sandershausen/O,name "Y-Wuergassen (-Sandershausen/O - Bergshausen) 2"
+11T0-0000-0983-G,Meppen,Y-Niederlangen [EOWS],"TenneT lists the same EIC as ""Y-Meppen (-Niederlangen - Doerpen/W) EOWS"""
