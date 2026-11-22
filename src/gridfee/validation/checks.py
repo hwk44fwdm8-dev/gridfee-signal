@@ -11,7 +11,13 @@ from collections.abc import Mapping, Sequence
 
 import pandas as pd
 
-from gridfee.backcast import CLASS_SEPARATOR, GENERATOR_SEPARATOR, RESIDUAL, neighbour_net_export
+from gridfee.backcast import (
+    CLASS_SEPARATOR,
+    GENERATOR_SEPARATOR,
+    RESIDUAL,
+    neighbour_net_export,
+    neighbour_of,
+)
 from gridfee.data.smard import TSO_RES_FILTERS
 from gridfee.network import ZoneNetwork
 
@@ -150,7 +156,7 @@ def check_cross_border(
         if (line.from_zone in boundary) == (line.to_zone in boundary):
             continue
         outward = line.to_zone in boundary
-        neighbour = line.to_zone if outward else line.from_zone
+        neighbour = neighbour_of(line.to_zone if outward else line.from_zone)
         key = (tso_of[line.from_zone if outward else line.to_zone], neighbour)
         flow = flows_mw[line.line_id] if outward else -flows_mw[line.line_id]
         modelled[key] = modelled.get(key, 0.0) + flow

@@ -55,6 +55,8 @@ GENERATOR_SEPARATOR = ":"
 CLASS_SEPARATOR = "@"
 MUST_RUN = "must_run"
 BALANCE = "balance"
+# boundary zone of one neighbour towards one TSO zone: "<neighbour>/<TSO zone>"
+BORDER_SEPARATOR = "/"
 _WINDOWS = {"day": "D", "week": "W"}
 _SHARE_SUM_TOLERANCE = 1e-6
 
@@ -112,6 +114,88 @@ class BackcastResult:
 
 def generator_id(kind: str, zone_id: str) -> str:
     return f"{kind}{GENERATOR_SEPARATOR}{zone_id}"
+
+
+def neighbour_of(zone_id: str) -> str:
+    """The neighbour a boundary zone of :func:`split_borders_by_tso` stands for."""
+    return zone_id.split(BORDER_SEPARATOR)[0]
+
+
+def split_borders_by_tso(network: ZoneNetwork) -> ZoneNetwork:
+    """Give a neighbour reached from several TSO zones one boundary zone per TSO zone.
+
+    SMARD publishes the physical flow per TSO zone and neighbour. With one zone per
+    neighbour the model decides how that flow divides over the neighbour's lines, by
+    their assumed susceptances; with one zone per TSO zone and neighbour
+    (``FR/Amprion``, ``FR/TransnetBW``) each border carries what was observed. Line ids
+    do not change. A neighbour with lines to other boundary zones is left as it is.
+    """
+    boundary = set(network.boundary_zone_ids)
+    tso_of = network.zone_to_tso
+    tso_at: dict[str, dict[str, str]] = {}
+    keep = set()
+    for line in network.lines:
+        ends = (line.from_zone, line.to_zone)
+        outside = [end for end in ends if end in boundary]
+        if len(outside) == 2:
+            keep.update(outside)
+        elif outside:
+            inside = ends[0] if ends[1] == outside[0] else ends[1]
+            tso_at.setdefault(outside[0], {})[line.line_id] = tso_of[inside]
+    split = {
+        zone_id: lines
+        for zone_id, lines in tso_at.items()
+        if zone_id not in keep and len(set(lines.values())) > 1
+    }
+    if not split:
+        return network
+
+    zones = []
+    for zone in network.zones:
+        if zone.zone_id not in split:
+            zones.append(zone)
+            continue
+        for tso in sorted(set(split[zone.zone_id].values())):
+            zones.append(
+                zone.model_copy(
+                    update={
+                        "zone_id": f"{zone.zone_id}{BORDER_SEPARATOR}{tso}",
+                        "name": f"{zone.name} ({tso})",
+                    }
+                )
+            )
+    lines = []
+    for line in network.lines:
+        update = {
+            end: f"{zone_id}{BORDER_SEPARATOR}{split[zone_id][line.line_id]}"
+            for end in ("from_zone", "to_zone")
+            if (zone_id := getattr(line, end)) in split
+        }
+        lines.append(line.model_copy(update=update) if update else line)
+    return ZoneNetwork(zones=tuple(zones), lines=tuple(lines))
+
+
+def boundary_net_export(network: ZoneNetwork, physical_flows_tso: pd.DataFrame) -> pd.DataFrame:
+    """Observed net export per boundary zone, also for those of :func:`split_borders_by_tso`."""
+    exports = neighbour_net_export(physical_flows_tso)
+    flows = physical_flows_tso.dropna(axis=1, how="all")
+    for zone_id in network.boundary_zone_ids:
+        if BORDER_SEPARATOR not in zone_id:
+            continue
+        neighbour, tso = zone_id.split(BORDER_SEPARATOR, 1)
+        column = f"{tso}_{neighbour}"
+        if column in flows:
+            exports[zone_id] = flows[column]
+    for neighbour in {neighbour_of(z) for z in exports.columns if BORDER_SEPARATOR in z}:
+        zones = [z for z in network.boundary_zone_ids if neighbour_of(z) == neighbour]
+        observed = {c for c in flows.columns if c.split("_", 1)[1] == neighbour}
+        unplaced = sorted(observed - {"_".join(z.split(BORDER_SEPARATOR)[::-1]) for z in zones})
+        if unplaced:
+            raise BackcastError(
+                f"cross-border flows {unplaced} have no line from that TSO zone in the network"
+            )
+        exports = exports.drop(columns=neighbour, errors="ignore")
+    return exports
 
 
 def neighbour_net_export(physical_flows_tso: pd.DataFrame) -> pd.DataFrame:
@@ -176,7 +260,7 @@ def build_backcast_inputs(
         if not frame.index.equals(hours):
             raise BackcastError(f"{name} and the injections must cover the same hours")
 
-    exports = neighbour_net_export(physical_flows_tso)
+    exports = boundary_net_export(network, physical_flows_tso)
     unknown = sorted(set(exports.columns) - set(boundary))
     if unknown:
         raise BackcastError(
@@ -433,7 +517,7 @@ def read_plant_efficiency(path: str | Path) -> pd.DataFrame:
         raise BackcastError(f"{path}: efficiency and share must lie in (0, 1]")
     # generator ids carry the efficiency with two decimals
     if (
-        frame.assign(efficiency=frame["efficiency"].round(2))
+        frame.assign(efficiency=frame["efficiency"].map("{:.2f}".format))
         .duplicated(["technology", "zone_id", "efficiency"])
         .any()
     ):

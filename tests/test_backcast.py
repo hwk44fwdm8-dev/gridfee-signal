@@ -19,13 +19,14 @@ from gridfee.backcast import (
     read_generation_shares,
     read_plant_efficiency,
     run_backcast,
+    split_borders_by_tso,
 )
 from gridfee.cli import app
 from gridfee.data import smard
 from gridfee.injections import build_historical_injections
 from gridfee.network import Line, Zone, ZoneNetwork, load_network
 from gridfee.signal import NEGATIVE, NEUTRAL, POSITIVE
-from gridfee.validation.checks import check_residual_generation
+from gridfee.validation.checks import check_cross_border, check_residual_generation
 
 DE22 = Path(__file__).parents[1] / "data" / "networks" / "de22"
 HOURS = pd.date_range("2023-01-01", periods=4, freq="h", tz="Europe/Berlin", name="hour")
@@ -534,6 +535,8 @@ def test_plant_files_are_read_and_checked(tmp_path):
     path.write_text("technology,zone_id,efficiency,share\ngas,S,0.401,0.5\ngas,S,0.404,0.5\n")
     with pytest.raises(BackcastError, match="more than once"):
         read_plant_efficiency(path)
+    path.write_text("technology,zone_id,efficiency,share\ngas,S,0.435,0.5\ngas,S,0.444,0.5\n")
+    assert len(read_plant_efficiency(path)) == 2  # ids @0.43 and @0.44
 
     path.write_text("month,technology,fuel_eur_per_mwh_th\n1,gas,60\n2,gas,50\n")
     assert read_fuel_prices(path)["gas"].to_dict() == {1: 60.0, 2: 50.0}
@@ -552,3 +555,52 @@ def test_shipped_plant_files_cover_the_fuels_with_classes():
     for fuel, of_fuel in classes.groupby("technology"):
         assert set(shares.columns[shares.loc[fuel] > 0]) <= set(of_fuel["zone_id"])
     assert read_fuel_prices(data / "costs" / "fuel_prices_2023.csv")["gas"].notna().sum() == 12
+
+
+# X is reached from N (TenneT) and from S (Amprion).
+TWO_BORDERS = ZoneNetwork(
+    zones=NETWORK.zones,
+    lines=(
+        *NETWORK.lines,
+        Line(line_id="N-X", from_zone="N", to_zone="X", susceptance_mw_per_rad=100, capacity_mw=50),
+    ),
+)
+TWO_FLOWS = pd.DataFrame(
+    {"Amprion_X": [0.0, 0.0, -30.0, 20.0], "TenneT_X": [10.0, 0.0, 0.0, -40.0]}, index=HOURS
+)
+
+
+def test_borders_by_tso_fix_the_observed_flow_of_each_border():
+    network = split_borders_by_tso(TWO_BORDERS)
+
+    assert network.boundary_zone_ids == ["X/Amprion", "X/TenneT"]
+    ends = {line.line_id: (line.from_zone, line.to_zone) for line in network.lines}
+    assert ends == {"N-S": ("N", "S"), "S-X": ("S", "X/Amprion"), "N-X": ("N", "X/TenneT")}
+    assert split_borders_by_tso(NETWORK) is NETWORK  # one TSO zone at the border
+
+    zonal = build_historical_injections(network.zones[:2], TSO_LOAD, TSO_RES)
+    inputs = build_backcast_inputs(network, zonal, GENERATION, TWO_FLOWS)
+    assert inputs.load_mw["X/Amprion"].tolist() == [0.0, 0.0, 0.0, 20.0]
+    assert inputs.load_mw["X/TenneT"].tolist() == [10.0, 0.0, 0.0, 0.0]
+    assert inputs.availability["import:X/TenneT"].tolist() == [0.0, 0.0, 0.0, 1.0]
+
+    # h3: 40 MW come in from X at N while 20 MW leave to X at S, as observed. With one
+    # zone for X the model would only see the net import of 20 MW.
+    result = run_backcast(network, inputs, HOURS[[3]], load_shedding_cost=1000.0)
+    flows = result.opf.flows_mw.iloc[0]
+    assert flows["N-X"] == pytest.approx(-40.0)
+    assert flows["S-X"] == pytest.approx(20.0)
+
+    checks = check_cross_border(network, result.opf.flows_mw, TWO_FLOWS.loc[HOURS[[3]]])
+    per_neighbour = checks[checks["check"] == "net export per neighbour"]
+    assert per_neighbour["item"].tolist() == ["X"]
+    assert per_neighbour["modelled"].iloc[0] == pytest.approx(-20.0 / 1e6)
+
+
+def test_borders_by_tso_need_a_line_for_every_observed_border():
+    network = split_borders_by_tso(TWO_BORDERS)
+    zonal = build_historical_injections(network.zones[:2], TSO_LOAD, TSO_RES)
+    flows = TWO_FLOWS.assign(TransnetBW_X=1.0)
+
+    with pytest.raises(BackcastError, match="TransnetBW_X"):
+        build_backcast_inputs(network, zonal, GENERATION, flows)

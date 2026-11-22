@@ -9,6 +9,7 @@ import pandas as pd
 import typer
 
 from gridfee.backcast import (
+    BORDER_SEPARATOR,
     BackcastError,
     PlantCosts,
     build_backcast_inputs,
@@ -18,6 +19,7 @@ from gridfee.backcast import (
     read_generation_shares,
     read_plant_efficiency,
     run_backcast,
+    split_borders_by_tso,
 )
 from gridfee.data import smard
 from gridfee.flows import OPFError, OPFResult, run_dc_opf
@@ -229,6 +231,11 @@ def validate(
         DE22, "--network", help="Directory with zones.csv and lines.csv."
     ),
     data: Path = typer.Option(Path("data/raw"), help="Directory written by `gridfee collect`."),
+    borders_by_tso: bool = typer.Option(
+        False,
+        "--borders-by-tso",
+        help="Set if the backcast was run with --borders-by-tso.",
+    ),
     wind_tolerance: float = typer.Option(0.10, help="Allowed deviation of the wind north share."),
     flow_tolerance: float = typer.Option(
         0.10, help="Allowed deviation of the net export per neighbour."
@@ -242,6 +249,8 @@ def validate(
     """Check backcast results against SMARD data and write a Markdown report."""
     try:
         network = load_network(network_dir)
+        if borders_by_tso:
+            network = split_borders_by_tso(network)
         flows = _read_berlin_hours(results / "flows_mw.csv")
         dispatch = _read_berlin_hours(results / "dispatch_mw.csv")
         report = _validate(
@@ -319,6 +328,13 @@ def backcast(
         help="With --plant-efficiency: 'day' or 'week'. A fuel's highest observed national "
         "output of the day or week is its available capacity, its lowest runs at no cost.",
     ),
+    borders_by_tso: bool = typer.Option(
+        False,
+        "--borders-by-tso",
+        help="Fix the observed flow per TSO zone and neighbour (as SMARD publishes it) "
+        "instead of per neighbour: France and the Netherlands, which are reached from "
+        "two TSO zones, get one boundary zone per TSO zone.",
+    ),
     load_shedding_cost: float = typer.Option(
         1000.0, help="Cost of unserved load in EUR/MWh, which keeps every hour solvable."
     ),
@@ -342,6 +358,8 @@ def backcast(
     out = out or Path("results") / f"backcast_{year}"
     try:
         network = load_network(network_dir)
+        if borders_by_tso:
+            network = split_borders_by_tso(network)
         internal = [zone for zone in network.zones if zone.zone_id in network.internal_zone_ids]
         tso_load = smard.read_table(data, "load_tso", year)
         tso_res = {
@@ -449,6 +467,14 @@ def backcast(
                 "therefore bounds the modelled fuel mix; within those bounds the cost decides. "
                 "Where SMARD's load, generation and cross-border flows do not balance in an "
                 "hour, the difference is spread over the zones like demand. Not a market model."
+            )
+        if borders_by_tso:
+            split = sorted(z for z in network.boundary_zone_ids if BORDER_SEPARATOR in z)
+            notes.append(
+                "Observed cross-border flows are fixed per TSO zone and neighbour for "
+                + ", ".join(split)
+                + ": each of these borders carries the flow SMARD reports for it, instead of "
+                "the model dividing the neighbour's flow over its lines."
             )
         for row in inputs.clipped_exchange.itertuples():
             notes.append(
