@@ -33,6 +33,7 @@ import pandas as pd
 POSITIVE = "positive"
 NEGATIVE = "negative"
 NEUTRAL = "neutral"
+SHEDDING_TOLERANCE_MW = 1e-3
 
 
 class SignalError(ValueError):

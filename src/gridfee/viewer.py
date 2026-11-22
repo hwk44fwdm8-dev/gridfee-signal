@@ -23,6 +23,7 @@ from gridfee.plots import (
     zone_summary,
 )
 from gridfee.plots.summary import TIMEZONE
+from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
 
 
 def _demo() -> tuple[ResultTables, ZoneNetwork]:
@@ -99,6 +100,10 @@ def _load(results: Path, network_dir: Path) -> tuple[ResultTables, ZoneNetwork]:
         raise PlotError("This results directory has no solved hours.")
     if not tables.shadow_prices.index.sort_values().equals(tables.flows_mw.index.sort_values()):
         raise PlotError("shadow_prices and flows_mw cover different hours.")
+    if tables.unserved_mw is not None and not tables.shadow_prices.index.sort_values().equals(
+        tables.unserved_mw.index.sort_values()
+    ):
+        raise PlotError("load_shedding_mw must cover the same solved hours as shadow_prices.")
     return tables, network
 
 
@@ -118,13 +123,20 @@ def _select_dates(tables: ResultTables, first: date, last: date) -> ResultTables
 
 
 def _series(series: pd.Series, label: str) -> None:
-    frame = pd.DataFrame({"day": series.index.strftime("%Y-%m-%d"), "value": series.values})
+    frame = pd.DataFrame(
+        {
+            "day": series.index.strftime("%Y-%m-%d"),
+            "value": series.values,
+            "segment": series.isna().cumsum().to_numpy(),
+        }
+    )
     chart = (
         alt.Chart(frame)
         .mark_line(point=True)
         .encode(
             x=alt.X("day:T", title=None, scale=alt.Scale(type="utc")),
             y=alt.Y("value:Q", title=label),
+            detail="segment:N",
             tooltip=[
                 alt.Tooltip("day:T", title="Day", format="%d %b %Y", timeUnit="utcyearmonthdate"),
                 alt.Tooltip("value:Q", title=label, format=",.2f"),
@@ -205,17 +217,26 @@ def _show_signal(signal: pd.DataFrame, network: ZoneNetwork, threshold: float) -
 def _show_lines(tables: ResultTables, network: ZoneNetwork) -> None:
     lines = network.lines_frame()
     selected = st.selectbox("Line", lines.index)
-    if tables.signal.empty or lines.empty:
-        st.info("No lines with fee-signal coverage for these dates.")
+    if lines.empty:
+        st.info("This network has no lines.")
         return
-    summary = line_summary(tables, lines["capacity_mw"]).sort_values(
+    if len(tables.flows_mw.index) == 0:
+        st.info("No solved hours for these dates.")
+        return
+    summary = line_summary(tables, lines["capacity_mw"], loading_all_solved=True).sort_values(
         "priced_hours", ascending=False
     )
-    counts = daily_line_hours(tables)
-    if selected in counts:
-        _series(counts[selected], "Hours with a shadow price")
+    if tables.signal.empty:
+        st.info("No fee-signal coverage for these dates. Loading still uses the solved flows.")
+        summary["priced_hours"] = pd.Series(pd.NA, index=summary.index, dtype="Int64")
     else:
-        st.info("This line had no non-zero shadow price in the selected period.")
+        counts = daily_line_hours(tables, include_unpriced=True)
+        _series(counts[selected], "Hours with a shadow price")
+    if (summary["max_loading"] > 1.001).any():
+        st.warning(
+            "Some solved flows exceed the supplied line capacities. "
+            "Check that --network uses the capacities from this run."
+        )
     table = lines[["from_zone", "to_zone", "capacity_mw"]].join(summary).loc[summary.index]
     st.dataframe(
         table.rename(
@@ -234,18 +255,24 @@ def _show_lines(tables: ResultTables, network: ZoneNetwork) -> None:
             "Peak loading": st.column_config.NumberColumn(format="percent"),
         },
     )
-    st.caption("Only hours with a fee signal count. A priced line has a non-zero shadow price.")
+    st.caption(
+        "Prices use only hours with fee-signal data; gaps show days without coverage. "
+        "Loading uses all solved hours."
+    )
 
 
 def _show_unserved(tables: ResultTables) -> None:
+    if len(tables.shadow_prices.index) == 0:
+        st.info("No solved hours for these dates.")
+        return
     if tables.unserved_mw is None:
         st.info("This run has no load shedding table.")
         return
     by_day = daily_unserved(tables)
     if by_day.empty:
-        st.info("No modeled unserved load above 0.001 MW per zone for these dates.")
+        st.info(f"No modeled unserved load above {SHEDDING_TOLERANCE_MW:g} MW total in any hour.")
         return
-    _series(by_day.sum(axis=1), "Total unserved load · MWh")
+    _series(by_day.sum(axis=1, min_count=1), "Total unserved load · MWh")
     st.dataframe(by_day.sum().sort_values(ascending=False).rename("Unserved load (MWh)"))
     st.caption(
         "Modeled shortfall, not observed outages. Backcasts omit these hours from the fee signal."
@@ -294,8 +321,19 @@ def main() -> None:
     signal_hours = len(tables.signal.index)
     metrics = st.columns(3)
     metrics[0].metric("Solved hours", f"{solved_hours:,}")
-    metrics[1].metric("Hours with fee signal", f"{signal_hours:,}")
-    metrics[2].metric("Solved hours without fee signal", f"{solved_hours - signal_hours:,}")
+    metrics[1].metric(
+        "Hours with fee-signal data", f"{signal_hours:,}", help="Includes rows with a zero signal."
+    )
+    missing = tables.shadow_prices.index.difference(tables.signal.index)
+    metrics[2].metric("Solved hours without fee-signal data", f"{len(missing):,}")
+    if tables.unserved_mw is not None:
+        shed = tables.unserved_mw.sum(axis=1)
+        missing = missing.difference(shed.index[shed > SHEDDING_TOLERANCE_MW])
+    if len(missing):
+        st.warning(
+            f"{len(missing):,} solved hours are missing fee-signal data and are not explained "
+            "by the saved load shedding. Check that the fee-signal file is complete."
+        )
     signal_tab, lines_tab, unserved_tab = st.tabs(["Fee signal", "Lines", "Unserved load"])
     with signal_tab:
         _show_signal(tables.signal, network, threshold)

@@ -45,6 +45,7 @@ from gridfee.flows import OPFResult, run_dc_opf
 from gridfee.injections import ZonalInjections
 from gridfee.network import ZoneNetwork
 from gridfee.signal import FeeSignal, compute_fee_signal
+from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,6 @@ BALANCE = "balance"
 # boundary zone of one neighbour towards one TSO zone: "<neighbour>/<TSO zone>"
 BORDER_SEPARATOR = "/"
 _WINDOWS = {"day": "D", "week": "W"}
-SHEDDING_TOLERANCE_MW = 1e-3
 _SHARE_SUM_TOLERANCE = 1e-6
 
 

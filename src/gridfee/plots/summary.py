@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from gridfee.signal import NEGATIVE, POSITIVE, classify_signal
+from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
 
 TIMEZONE = "Europe/Berlin"
 
@@ -39,6 +40,8 @@ class ResultTables:
 def read_results(results: str | Path) -> ResultTables:
     """Read the tables that ``gridfee backcast`` (or ``run`` and ``signal``) wrote."""
     results = Path(results)
+    if not results.is_dir():
+        raise PlotError(f"{results}: --results must be an existing run directory, not a file")
     signal = _read_hourly(results, "fee_signal")
     shadow = _read_hourly(results, "shadow_prices")
     flows = _read_hourly(results, "flows_mw")
@@ -49,7 +52,7 @@ def read_results(results: str | Path) -> ResultTables:
             f"first {unknown[0]}"
         )
     unserved = None
-    if (results / "load_shedding_mw.csv").exists():
+    if any((results / f"load_shedding_mw.{ext}").exists() for ext in ("csv", "parquet")):
         unserved = _read_hourly(results, "load_shedding_mw")
     return ResultTables(signal, shadow, flows, unserved)
 
@@ -61,7 +64,15 @@ def _read_hourly(results: Path, name: str) -> pd.DataFrame:
     path = max(paths, key=lambda p: p.stat().st_mtime)
     frame = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path, index_col=0)
     try:
-        frame.index = pd.to_datetime(frame.index, utc=True).tz_convert(TIMEZONE)
+        index = frame.index
+        has_timezone = isinstance(index, pd.DatetimeIndex) and index.tz is not None
+        if (
+            len(index)
+            and not has_timezone
+            and not index.astype(str).str.contains(r"(?:[Zz]|[+-]\d{2}:?\d{2})$").all()
+        ):
+            raise ValueError("missing UTC offset")
+        frame.index = pd.to_datetime(index, format="mixed", utc=True).tz_convert(TIMEZONE)
     except (ValueError, TypeError) as err:
         raise PlotError(f"{path}: the first column must hold hours with a UTC offset") from err
     return frame.rename_axis("hour")
@@ -80,18 +91,23 @@ def zone_summary(signal: pd.DataFrame, threshold: float = 0.0) -> pd.DataFrame:
 
 
 def line_summary(
-    tables: ResultTables, capacity_mw: pd.Series, threshold: float = 0.0
+    tables: ResultTables,
+    capacity_mw: pd.Series,
+    threshold: float = 0.0,
+    *,
+    loading_all_solved: bool = False,
 ) -> pd.DataFrame:
     """Per line, over the hours of the fee signal: hours with a shadow price above
     ``threshold`` (the line is full and that costs something), the mean size of the
-    price in those hours, and the mean and highest loading (flow / capacity)."""
+    price in those hours, and mean and highest loading (optionally over every solved hour)."""
     hours = tables.signal.index
     price = tables.shadow_prices.loc[hours].abs()
     priced = price > threshold
     missing = sorted(set(price.columns) - set(capacity_mw.index))
     if missing:
         raise PlotError(f"the network lacks the lines {missing} of shadow_prices")
-    loading = tables.flows_mw.loc[hours, price.columns].abs() / capacity_mw[price.columns]
+    flow = tables.flows_mw if loading_all_solved else tables.flows_mw.loc[hours]
+    loading = flow[price.columns].abs() / capacity_mw[price.columns]
     return pd.DataFrame(
         {
             "priced_hours": priced.sum(),
@@ -107,21 +123,31 @@ def daily_signal(signal: pd.DataFrame) -> pd.DataFrame:
     return _full_days(signal.resample("D").mean())
 
 
-def daily_line_hours(tables: ResultTables, threshold: float = 0.0) -> pd.DataFrame:
+def daily_line_hours(
+    tables: ResultTables, threshold: float = 0.0, *, include_unpriced: bool = False
+) -> pd.DataFrame:
     """Hours per day (rows) in which each line has a shadow price above ``threshold``,
-    over the hours of the fee signal. Only lines with at least one such hour."""
+    over the hours of the fee signal. Days without coverage are NaN."""
     priced = tables.shadow_prices.loc[tables.signal.index].abs() > threshold
-    priced = priced.loc[:, priced.any()]
-    return _full_days(priced.resample("D").sum()).fillna(0).astype(int)
+    if not include_unpriced:
+        priced = priced.loc[:, priced.any()]
+    return _full_days(priced.resample("D").sum(min_count=1))
 
 
-def daily_unserved(tables: ResultTables, tolerance_mw: float = 1e-3) -> pd.DataFrame:
+def hourly_unserved(unserved_mw: pd.DataFrame, tolerance_mw: float) -> pd.DataFrame:
+    """Keep zonal shortfalls where the total in that hour exceeds the tolerance."""
+    unserved = unserved_mw.where(unserved_mw.sum(axis=1) > tolerance_mw, 0.0, axis=0)
+    return unserved.loc[:, unserved.sum() > 0]
+
+
+def daily_unserved(
+    tables: ResultTables, tolerance_mw: float = SHEDDING_TOLERANCE_MW
+) -> pd.DataFrame:
     """Unserved load in MWh per day (rows) and zone; only zones that have any."""
     if tables.unserved_mw is None:
         return pd.DataFrame()
-    unserved = tables.unserved_mw.where(tables.unserved_mw > tolerance_mw, 0.0)
-    unserved = unserved.loc[:, unserved.sum() > 0]
-    return _full_days(unserved.resample("D").sum()).fillna(0.0)
+    unserved = hourly_unserved(tables.unserved_mw, tolerance_mw)
+    return _full_days(unserved.resample("D").sum(min_count=1))
 
 
 def _full_days(daily: pd.DataFrame) -> pd.DataFrame:

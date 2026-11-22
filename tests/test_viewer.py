@@ -24,6 +24,8 @@ def test_demo_filters_and_keeps_the_repeated_hour(monkeypatch):
     assert not app.exception
     assert "Synthetic demo" in app.info[0].value
     assert [m.value for m in app.metric] == ["337", "334", "3"]
+    assert app.metric[1].label == "Hours with fee-signal data"
+    assert not app.warning
     assert [tab.label for tab in app.tabs] == ["Fee signal", "Lines", "Unserved load"]
     assert [heading.value for heading in app.subheader][:2] == [
         "Daily mean fee signal",
@@ -83,7 +85,7 @@ def test_run_with_no_signal_hours_still_shows_unserved_load(monkeypatch, tmp_pat
     )
     for name, ids, value in (
         ("shadow_prices", network.line_ids, 100),
-        ("flows_mw", network.line_ids, 0),
+        ("flows_mw", network.line_ids, 10),
         ("load_shedding_mw", network.zone_ids, 1),
     ):
         pd.DataFrame(value, index=hour, columns=ids).to_csv(tmp_path / f"{name}.csv")
@@ -92,7 +94,65 @@ def test_run_with_no_signal_hours_still_shows_unserved_load(monkeypatch, tmp_pat
     assert not app.exception and not app.error
     assert [m.value for m in app.metric] == ["1", "0", "1"]
     assert any("No internal-zone fee signal" in info.value for info in app.info)
-    assert app.dataframe[0].value["Unserved load (MWh)"].sum() == 4
+    lines, unserved = (frame.value for frame in app.dataframe)
+    assert lines["Priced hours"].isna().all()
+    assert (lines["Peak loading"] > 0).all()
+    assert unserved["Unserved load (MWh)"].sum() == 4
+    assert not app.warning
+
+
+def _write_run(directory, hours, *, shed_hours=None, fee_hours=None, flow=0.0):
+    network_dir = EXAMPLES / "three_zone"
+    network = viewer.load_network(network_dir)
+    for name, values, ids, index in (
+        ("fee_signal", 0.0, network.internal_zone_ids, fee_hours),
+        ("shadow_prices", 0.0, network.line_ids, hours),
+        ("flows_mw", flow, network.line_ids, hours),
+        ("load_shedding_mw", 0.0008, network.zone_ids, shed_hours),
+    ):
+        if name == "load_shedding_mw" and index is None:
+            continue
+        pd.DataFrame(values, columns=ids, index=hours if index is None else index).rename_axis(
+            "hour"
+        ).to_csv(directory / f"{name}.csv")
+    return ("--results", directory, "--network", network_dir)
+
+
+@pytest.mark.parametrize("problem", ["short", "shifted", "naive"])
+def test_rejects_mismatched_shedding_hours_and_naive_dates(monkeypatch, tmp_path, problem):
+    hours = pd.date_range("2023-03-26", periods=23, freq="h", tz="Europe/Berlin")
+    if problem == "naive":
+        args = _write_run(tmp_path, hours.tz_localize(None))
+        expected = "must hold hours with a UTC offset"
+    else:
+        shed_hours = hours[:3] if problem == "short" else hours + pd.Timedelta(days=2)
+        args = _write_run(tmp_path, hours, shed_hours=shed_hours)
+        expected = "load_shedding_mw must cover the same solved hours"
+    app = _app(monkeypatch, *args)
+    assert not app.exception
+    assert expected in app.error[0].value
+
+
+def test_warns_about_missing_fee_data_and_over_capacity(monkeypatch, tmp_path):
+    hours = pd.date_range("2023-03-26", periods=23, freq="h", tz="Europe/Berlin")
+    args = _write_run(tmp_path, hours, fee_hours=hours[:3], flow=500.0)
+    app = _app(monkeypatch, *args)
+    assert not app.exception and not app.error
+    assert [m.value for m in app.metric] == ["23", "3", "20"]
+    assert "20 solved hours are missing fee-signal data" in app.warning[0].value
+    assert "exceed the supplied line capacities" in app.warning[1].value
+
+
+def test_unserved_load_for_no_solve_and_distributed_shortfall(monkeypatch, tmp_path):
+    hours = pd.DatetimeIndex(["2023-01-01", "2023-01-03"], tz="Europe/Berlin")
+    args = _write_run(tmp_path, hours, shed_hours=hours, fee_hours=hours[:0])
+    app = _app(monkeypatch, *args)
+    assert not app.exception and not app.warning
+    assert app.dataframe[-1].value["Unserved load (MWh)"].sum() == pytest.approx(0.0064)
+    day = date(2023, 1, 2)
+    app.date_input[0].set_value((day, day)).run()
+    assert [m.value for m in app.metric] == ["0", "0", "0"]
+    assert app.tabs[2].info[0].value == "No solved hours for these dates."
 
 
 @pytest.mark.parametrize("invalid_border", [False, True])

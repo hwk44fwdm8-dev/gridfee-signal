@@ -355,13 +355,13 @@ def _timeseries_lines(tables: ResultTables, zones, lines, threshold: float):
     mesh = ax.pcolormesh(
         _day_edges(daily.index),
         np.arange(len(daily.columns) + 1),
-        np.ma.masked_equal(daily.to_numpy().T, 0),
+        np.ma.masked_invalid(daily.to_numpy(dtype=float).T),
         cmap="YlOrRd",
         norm=Normalize(0, 24),
     )
     ax.set_facecolor("#f4f4f4")
     labels = [
-        f"{_line_label(line, zones, lines)} ({hours:,} h)" for line, hours in daily.sum().items()
+        f"{_line_label(line, zones, lines)} ({hours:,.0f} h)" for line, hours in daily.sum().items()
     ]
     ax.set_yticks(np.arange(len(daily.columns)) + 0.5, labels, fontsize=8)
     ax.invert_yaxis()

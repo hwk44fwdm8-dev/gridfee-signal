@@ -25,10 +25,11 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from gridfee.backcast import SHEDDING_TOLERANCE_MW, BackcastError, BackcastInputs
+from gridfee.backcast import BackcastError, BackcastInputs
 from gridfee.flows import OPFResult, run_dc_opf
 from gridfee.network import Zone, ZoneNetwork
 from gridfee.signal import FeeSignal, compute_fee_signal
+from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
 
 SINGLE_RUN = "single"
 TWO_RUN = "two-run"
