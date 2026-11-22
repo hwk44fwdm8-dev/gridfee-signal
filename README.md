@@ -141,6 +141,12 @@ minutes. `gridfee signal --results <dir>` computes the signal from the output of
 `gridfee run`, and `gridfee validate --results <dir> --year 2023` repeats the checks (into
 `revalidation.md`).
 
+`gridfee backcast --method two-run` is a second method next to this single run: a market
+run with Germany as one price zone, then a grid run that moves plants at least cost
+until no line is overloaded. It writes the modelled redispatch per hour, generator and
+zone (`redispatch_*.csv`) and the fee signal of the grid run; its assumptions are in
+[docs/METHODOLOGY.md](docs/METHODOLOGY.md#two-run-method-market-run-then-grid-run-gridfee-backcast---method-two-run).
+
 A **positive** signal means that feeding in at the zone adds to congestion and taking
 power out (charging a battery) relieves it; **negative** is the reverse. Method, sign
 convention, what is observed and what is assumed: [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
