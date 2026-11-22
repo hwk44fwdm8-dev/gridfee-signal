@@ -68,6 +68,10 @@ def _demo() -> tuple[ResultTables, ZoneNetwork]:
 def _load(results: Path, network_dir: Path) -> tuple[ResultTables, ZoneNetwork]:
     network = load_network(network_dir)
     tables = read_results(results)
+    if tables.unserved_mw is not None and set(tables.unserved_mw.columns) != set(network.zone_ids):
+        from gridfee.backcast import restore_tso_border_splits
+
+        network = restore_tso_border_splits(network, set(tables.unserved_mw.columns))
     zones = set(network.zone_ids)
     signal_zones = set(tables.signal.columns)
     if not set(network.internal_zone_ids) <= signal_zones <= zones:

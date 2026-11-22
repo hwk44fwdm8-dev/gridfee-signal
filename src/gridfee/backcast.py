@@ -34,7 +34,7 @@ by one cost per fuel, without start-up costs, heat demand, outages or reserves.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -137,6 +137,17 @@ def split_borders_by_tso(network: ZoneNetwork, physical_flows_tso: pd.DataFrame)
     for column in physical_flows_tso.dropna(axis=1, how="all").columns:
         tso, neighbour = column.split("_", 1)
         observed.setdefault(neighbour, set()).add(tso)
+    return _split_border_zones(network, lambda zone_id, tsos: observed.get(zone_id, set()) <= tsos)
+
+
+def restore_tso_border_splits(network: ZoneNetwork, solved_zone_ids: set[str]) -> ZoneNetwork:
+    """Restore split boundaries for a reader that will check the full solved zone set."""
+    return _split_border_zones(network, lambda zone_id, _: zone_id not in solved_zone_ids)
+
+
+def _split_border_zones(
+    network: ZoneNetwork, should_split: Callable[[str, set[str]], bool]
+) -> ZoneNetwork:
     boundary = set(network.boundary_zone_ids)
     tso_of = network.zone_to_tso
     tso_at: dict[str, dict[str, str]] = {}
@@ -149,13 +160,11 @@ def split_borders_by_tso(network: ZoneNetwork, physical_flows_tso: pd.DataFrame)
         elif outside:
             inside = ends[0] if ends[1] == outside[0] else ends[1]
             tso_at.setdefault(outside[0], {})[line.line_id] = tso_of[inside]
-    split = {
-        zone_id: lines
-        for zone_id, lines in tso_at.items()
-        if zone_id not in keep
-        and len(set(lines.values())) > 1
-        and observed.get(zone_id, set()) <= set(lines.values())
-    }
+    split = {}
+    for zone_id, lines in tso_at.items():
+        tsos = set(lines.values())
+        if zone_id not in keep and len(tsos) > 1 and should_split(zone_id, tsos):
+            split[zone_id] = lines
     if not split:
         return network
 
