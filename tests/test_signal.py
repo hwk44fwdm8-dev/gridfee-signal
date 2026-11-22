@@ -200,12 +200,21 @@ def test_aggregate_signal_is_the_weighted_mean_of_the_zones():
     assert result.threshold == 1.0
 
 
+def test_aggregate_signal_leaves_out_zones_of_weight_zero():
+    """A bus without load (a tee point, the other voltage level) does not count."""
+    signal = pd.DataFrame({"N1": [30.0], "N2": [-10.0]}, index=pd.Index(["h1"]))
+    groups = pd.DataFrame({"zone_id": ["N1", "N2"], "report_zone": "Z1", "weight": [0.0, 2.0]})
+    result = aggregate_signal(FeeSignal(signal, classify_signal(signal), 0.0), groups)
+    assert result.signal.loc["h1"].tolist() == pytest.approx([-10.0])
+
+
 @pytest.mark.parametrize(
     ("zone_ids", "weights", "message"),
     [
         (["N1", "N1"], [1.0, 1.0], "twice"),
         (["N1", "N9"], [1.0, 1.0], "without a signal"),
-        (["N1", "N2"], [1.0, 0.0], "positive"),
+        (["N1", "N2"], [1.0, -1.0], "negative"),
+        (["N1", "N2"], [0.0, 0.0], "all zero"),
     ],
 )
 def test_aggregate_signal_rejects_bad_groups(zone_ids, weights, message):

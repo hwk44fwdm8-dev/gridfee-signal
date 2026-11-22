@@ -3,9 +3,11 @@
     python scripts/build_desub_shares.py --network NETWORK_DIR --out OUT_DIR
 
 Reads the buses (zones.csv written by scripts/derive_desub_network.py), the load
-share per substation (data/networks/desub/load_shares.csv) and the per-region
-inputs of the 38-region network (data/shares/de38, data/weather/de38), and writes
-the same files with one row or column per bus, for `gridfee backcast`.
+share and the capacity per substation (load_shares.csv and
+capacity_by_substation.csv in data/networks/desub) and, per region, the efficiency
+classes and weather factors of the 38-region network (data/shares/de38,
+data/weather/de38), and writes the share, weather and reporting files of
+`gridfee backcast` with one row or column per bus.
 
 Load and plants of a substation sit on one bus: its lowest voltage level that is
 connected (ASSUMPTION: the 110 kV grid below is fed from 220 kV where a substation
@@ -24,6 +26,7 @@ from gridfee.injections.weather import read_capacity_factors, write_capacity_fac
 ROOT = Path(__file__).resolve().parents[1]
 DESUB = ROOT / "data" / "networks" / "desub"
 DE38 = ROOT / "data" / "shares" / "de38"
+WEATHER = ("wind_onshore", "wind_offshore", "solar")
 
 
 def injection_bus(buses: pd.DataFrame) -> pd.Series:
@@ -37,6 +40,7 @@ def main() -> None:
     parser.add_argument("--network", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--load-shares", type=Path, default=DESUB / "load_shares.csv")
+    parser.add_argument("--capacity", type=Path, default=DESUB / "capacity_by_substation.csv")
     parser.add_argument("--region-shares", type=Path, default=DE38)
     parser.add_argument(
         "--capacity-factors",
@@ -72,21 +76,35 @@ def main() -> None:
         args.out / "population_shares.csv"
     )
 
-    # INTERIM: a region's plants are spread over its substations like its load.
-    for name, per in (
-        ("capacity_shares.csv", ["technology"]),
-        ("generation_shares.csv", ["technology"]),
-        ("plant_efficiency.csv", ["technology", "efficiency"]),
-    ):
-        region = pd.read_csv(args.region_shares / name, comment="#")
-        spread = region.rename(columns={"zone_id": "nuts2"}).merge(
-            table.reset_index()[["zone_id", "nuts2", "of_region"]], on="nuts2"
-        )
-        if name == "plant_efficiency.csv":
-            spread = spread[spread["of_region"] > 0]
-        else:
-            spread["share"] = spread["share"] * spread["of_region"]
-        spread[[*per[:1], "zone_id", *per[1:], "share"]].to_csv(args.out / name, index=False)
+    # Plants: MW per substation and technology, on the substation's bus.
+    capacity = pd.read_csv(args.capacity, comment="#")
+    unknown = sorted(set(capacity["substation_id"]) - set(bus_of.index))
+    if unknown:
+        raise SystemExit(f"capacity on substations without a connected bus: {unknown}")
+    capacity["zone_id"] = capacity["substation_id"].map(bus_of)
+    mw = capacity.pivot_table(
+        index="zone_id", columns="technology", values="capacity_mw", aggfunc="sum"
+    )
+    mw = mw.reindex(table.index).fillna(0.0)
+    weather = [tech for tech in WEATHER if tech in mw]
+    of_tso = mw[weather] / mw[weather].groupby(table["tso_zone"]).transform("sum")
+    long = of_tso.fillna(0.0).round(9).rename_axis(columns="technology").stack()
+    long.rename("share").reset_index()[["technology", "zone_id", "share"]].to_csv(
+        args.out / "capacity_shares.csv", index=False
+    )
+    other = mw.drop(columns=weather)
+    long = (other / other.sum()).round(9).rename_axis(columns="technology").stack()
+    long.rename("share").reset_index()[["technology", "zone_id", "share"]].to_csv(
+        args.out / "generation_shares.csv", index=False
+    )
+    # ASSUMPTION: the plants of a fuel at a bus have the efficiency classes of its region.
+    region = pd.read_csv(args.region_shares / "plant_efficiency.csv", comment="#")
+    classes = region.rename(columns={"zone_id": "nuts2"}).merge(
+        table.reset_index()[["zone_id", "nuts2"]], on="nuts2"
+    )
+    classes[["technology", "zone_id", "efficiency", "share"]].to_csv(
+        args.out / "plant_efficiency.csv", index=False
+    )
 
     # Weather: every bus has the hourly factors of its region.
     factors = read_capacity_factors(args.capacity_factors)

@@ -1,5 +1,9 @@
 # Substations whose OpenStreetMap object scripts/derive_desub_substations.py cannot
 # find by name. ASSUMPTIONS, from where the substation is known to be.
+# Not listed here because it is found without help, but less certain than the rest:
+# Simbach has no substation outline in OpenStreetMap. It sits where the two 220 kV
+# lines "St. Peter - Simbach" and "Altheim - Simbach" end (position_basis nearest),
+# 4 km from their tee as JAO's line length says.
 name,osm_id,basis
 Grosskrotzenburg,relation/17148024,"OpenStreetMap ""Kraftwerkseinspeisung Staudinger"": the substation is at the Staudinger power station in Grosskrotzenburg"
 Wengerrohr,way/88692727,"OpenStreetMap ""220 kV Wengerohr"": JAO spells it with two r"

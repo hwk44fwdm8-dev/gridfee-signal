@@ -392,8 +392,10 @@ def backcast(
     ),
     plant_window: str = typer.Option(
         "day",
-        help="With --plant-efficiency: 'day' or 'week'. A fuel's highest observed national "
-        "output of the day or week is its available capacity, its lowest runs at no cost.",
+        help="With --plant-efficiency: 'day', 'week' or 'year'. A fuel's highest observed "
+        "national output of the day, week or year is its available capacity, its lowest runs "
+        "at no cost. 'year' leaves plants that did not run in an hour free to replace others "
+        "behind a full line, as redispatch does.",
     ),
     borders_by_tso: bool = typer.Option(
         False,

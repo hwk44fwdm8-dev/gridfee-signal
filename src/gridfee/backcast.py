@@ -57,7 +57,7 @@ MUST_RUN = "must_run"
 BALANCE = "balance"
 # boundary zone of one neighbour towards one TSO zone: "<neighbour>/<TSO zone>"
 BORDER_SEPARATOR = "/"
-_WINDOWS = {"day": "D", "week": "W"}
+_WINDOWS = {"day": "D", "week": "W", "year": "Y"}
 SHEDDING_TOLERANCE_MW = 1e-3
 _SHARE_SUM_TOLERANCE = 1e-6
 
@@ -89,7 +89,7 @@ class PlantCosts:
     parameters: the cost file (:func:`read_cost_parameters`), indexed by technology.
     efficiency: rows ``technology, zone_id, efficiency, share`` (:func:`read_plant_efficiency`).
         Fuels of ``parameters`` without rows here get the one efficiency of ``parameters``.
-    window: "day" or "week" (Europe/Berlin). Per fuel, the capacity available in an hour
+    window: "day", "week" or "year" (Europe/Berlin). Per fuel, the capacity available in an hour
         is the fuel's highest observed national output of that day or week, and its
         lowest output of that day or week runs at no cost.
     fuel_prices: month (1-12) x technology, EUR per MWh of heat (:func:`read_fuel_prices`);
@@ -443,6 +443,9 @@ def _add_plant_classes(
     in_window = national.groupby(local.to_period(_WINDOWS[plant_costs.window]))
     must_run = (in_window.transform("min").fillna(0.0) / peak)[hours]
     flexible = (in_window.transform("max").fillna(0.0) / peak)[hours] - must_run
+    # A fuel that stops for good within the window (nuclear in April 2023) has none after.
+    produced = national.index[national > 0]
+    flexible = flexible.where((hours >= produced[0]) & (hours <= produced[-1]), 0.0)
 
     parameters = plant_costs.parameters.loc[fuel]
     price = pd.Series(float(parameters["fuel_eur_per_mwh_th"]), index=hours)

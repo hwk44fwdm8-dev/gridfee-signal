@@ -500,6 +500,17 @@ def test_plant_classes_close_the_hourly_balance_of_the_observations():
     assert checks.loc["gas generated", "modelled"] > 0
 
 
+def test_plant_window_year_keeps_the_years_peak_available_until_a_fuel_stops():
+    yearly = PlantCosts(PLANT_PARAMETERS, PLANT_EFFICIENCY, window="year")
+    inputs = _fuel_inputs(plant_costs=yearly)
+
+    # Gas: 20 MW of 100 at no cost, the other 80 free in every hour, not just when it ran.
+    assert inputs.availability["gas:S@must_run"].tolist() == pytest.approx([0.2] * 4)
+    assert inputs.availability["gas:S@0.60"].tolist() == pytest.approx([0.8] * 4)
+    # Lignite last ran in h2 and is gone after it.
+    assert inputs.availability["lignite:N@0.50"].tolist() == pytest.approx([1.0, 1.0, 1.0, 0.0])
+
+
 def test_monthly_fuel_prices_change_the_cost_of_a_class():
     prices = pd.DataFrame({"gas": [60.0]}, index=pd.Index([1], name="month"))
     weekly = PlantCosts(PLANT_PARAMETERS, PLANT_EFFICIENCY, prices, window="week")

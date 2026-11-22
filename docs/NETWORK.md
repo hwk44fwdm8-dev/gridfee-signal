@@ -219,3 +219,73 @@ every capacity can be recomputed from the workbook; it does not repeat the curre
 
 For your own network, `gridfee.network.pypsa_eur.derive_zone_lines(buses, lines, links,
 busmap)` does steps 3 to 5 for any busmap.
+
+## The substation network of Germany (`data/networks/desub/`)
+
+The grid as the TSOs publish it, without merging: one bus per substation and voltage
+level, one branch per circuit and per 380/220 kV transformer, all from JAO's Core
+Static Grid Model (workbook of 1 March 2023). The 22 zones of `de22` are kept only to
+report the fee signal (`report_zone` of each substation). Neighbouring countries stay
+one boundary zone each, split by TSO where `--borders-by-tso` is set.
+
+| | Count |
+| --- | --- |
+| Substations (`substations.csv`, kind `substation`) | 373 |
+| Tee points on lines (kind `tee`) | 51 |
+| Buses in Germany: 220 kV / 380 kV | 218 / 285 |
+| Circuits: 220 kV / 380 kV | 329 / 541 |
+| 380/220 kV transformers | 103 |
+| DC links to neighbours (`dc_links.csv`) | 4 |
+
+It is built in two steps. `scripts/derive_desub_substations.py` writes
+`substations.csv`; `scripts/derive_desub_network.py` writes `buses.csv` and
+`branches.csv` here and, outside the repository, the `zones.csv` and `lines.csv` that
+`gridfee backcast --network` reads. Those two hold JAO's reactances and currents in
+another form and are not committed (JAO's terms restrict reproduction); with the
+workbook and the map anyone can rebuild them.
+
+How it is made:
+
+1. **Substations.** Every end of a German circuit and every German transformer's
+   substation, under JAO's name. Circuit sections that share one EIC code but have
+   different ends are kept apart (suffix `/2`, `/3`).
+2. **Positions** are OpenStreetMap's, not JAO's: the substation of that name within
+   40 km of where JAO's map draws it (`position_basis` `name`, 319 substations; on
+   part of the name, `name_part`, 31), else an unnamed OpenStreetMap substation or
+   line end within 3 km (`nearest`, 13), else by hand with the reason in
+   `substation_positions.csv` (`manual`, 5), else the mean of the neighbours
+   (`neighbours`: 5 substations and all tee points). The name matches were not checked
+   one by one.
+3. **Buses.** A substation with both voltage levels is two buses, `<id>-380` and
+   `<id>-220`, joined only by its transformers.
+4. **Circuits.** Susceptance from the published reactance; limit `0.7 x sqrt(3) x
+   voltage x current`, with the current chosen as in the 38-region network (`Fixed`,
+   else the lowest period, else `DLRmax`; `limit_kind` in `branches.csv`: 418 fixed,
+   171 period, 280 `DLRmax`, the last an upper bound).
+5. **Transformers.** The 103 units of the German TSOs between 380 and 220 kV, each a
+   branch with the published reactance and `0.7 x sqrt(3) x voltage x current`
+   (`Fixed` current, else the lower, else the upper published one: 48, 22 and 33
+   units; 235 to 950 MW). Left out of the 127 German rows: 5 at Bürs in Austria and
+   19 with 380 kV on both sides (phase shifters and the converter transformers of
+   offshore links), which the model does not operate.
+6. **DC links** land where their published routes do: ALEGrO at Oberzier, Kontek at
+   Bentwisch, NordLink at Wilster/West, Baltic Cable at Herrenwyk (ASSUMPTION from
+   general knowledge of the links; ratings as in the 38-region network).
+
+Limits of this network:
+
+- **No 110 kV.** Load and plants connected below 220 kV sit on one substation, on its
+  220 kV bus where it has one. In reality the 110 kV grid feeds a town from several
+  substations and carries some power in parallel to the transmission grid.
+- **One line is left out:** Gütersloh–Hesseln at 220 kV, because JAO lists no
+  transformer at either end, so the pair has no connection to the rest. Their load
+  is not lost: each substation still has a connected bus (`connected` in `buses.csv`
+  and `branches.csv`).
+- **No switching, no phase shifters, no N-1 calculation.** Every published element is
+  in service all year with 0.7 of its limit. Operators open busbars and steer phase
+  shifters to keep weak 220 kV paths from filling; the model cannot.
+- **Baltic Cable** (600 MW) reaches the grid through one 258 MW transformer at Siems
+  and one 253 MW line to Lübeck, so its observed flow cannot be carried in many hours.
+- **Simbach** has no substation outline in OpenStreetMap; it is placed where its two
+  220 kV lines end.
+- **One publication,** as for the 38 regions; tie lines as there.
