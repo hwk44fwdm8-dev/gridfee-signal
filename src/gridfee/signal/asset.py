@@ -1,10 +1,10 @@
 """Hourly asset look-back, not a forecast. Positive fees mean the asset pays.
 
 Battery operation is an idealised best case with perfect foresight of each
-Europe/Berlin day's signal: one cycle at most, no inter-day energy transfer,
-and no chronological state-of-charge constraint. E is the charge-side energy
-budget; discharge energy is charge energy times round-trip efficiency. Each
-hour is used for only one direction, including fractional final hours.
+Europe/Berlin day's signal. Stored energy stays between zero and the usable
+capacity E, starting and ending each day empty. Losses apply on discharge;
+discharge energy is withdrawn stored energy times round-trip efficiency. Each
+hour is used for only one direction; multiple cycles per day are allowed.
 """
 
 from __future__ import annotations
@@ -13,12 +13,39 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import Bounds, LinearConstraint, milp
 
 
 @dataclass(frozen=True)
 class AssetResult:
     hourly: pd.DataFrame
     summary: dict[str, float | int]
+
+
+def _battery_day(day: pd.Series, power: float, capacity: float, efficiency: float) -> np.ndarray:
+    n = len(day)
+    identity = np.eye(n)
+    cumulative = np.tril(np.ones((n, n)))
+    zeros = np.zeros((n, n))
+    # Variables: grid-side charge, grid-side discharge, binary charging mode.
+    balance = np.hstack([cumulative, -cumulative / efficiency, zeros])
+    charge_limit = np.hstack([identity, zeros, -power * identity])
+    discharge_limit = np.hstack([zeros, identity, power * identity])
+    matrix = np.vstack([balance, charge_limit, discharge_limit])
+    lower = np.concatenate([np.zeros(n), np.full(2 * n, -np.inf)])
+    upper = np.concatenate([np.full(n, capacity), np.zeros(n), np.full(n, power)])
+    upper[n - 1] = 0.0
+    prices = day.to_numpy()
+    result = milp(
+        c=np.concatenate([-prices, prices, np.zeros(n)]),
+        integrality=np.concatenate([np.zeros(2 * n), np.ones(n)]),
+        bounds=Bounds(np.zeros(3 * n), np.concatenate([np.full(2 * n, power), np.ones(n)])),
+        constraints=LinearConstraint(matrix, lower, upper),
+        options={"mip_rel_gap": 0.0},
+    )
+    if not result.success:
+        raise RuntimeError(f"Battery scheduling failed for {day.index[0].date()}: {result.message}")
+    return result.x[n : 2 * n] - result.x[:n]
 
 
 def asset_fees(
@@ -57,28 +84,10 @@ def asset_fees(
     valid = signal.dropna()
     if kind != "battery":
         injection.loc[valid.index] = power_mw * (-1 if kind == "load" else 1)
-    else:
+    elif energy_mwh > 0:
         days = valid.index.tz_convert("Europe/Berlin").date
         for _, day in valid.groupby(days):
-            ordered = day.sort_values(kind="stable")
-            low, high = 0, len(ordered) - 1
-            remaining = energy_mwh
-            while low < high and remaining > 1e-10:
-                discharge, charge = ordered.index[low], ordered.index[high]
-                if efficiency * ordered.iloc[low] >= ordered.iloc[high]:
-                    break
-                amount = min(
-                    remaining,
-                    power_mw + injection.at[charge],
-                    (power_mw - injection.at[discharge]) / efficiency,
-                )
-                injection.at[charge] -= amount
-                injection.at[discharge] += amount * efficiency
-                remaining -= amount
-                if injection.at[charge] <= -power_mw + 1e-10:
-                    high -= 1
-                if injection.at[discharge] >= power_mw - 1e-10:
-                    low += 1
+            injection.loc[day.index] = _battery_day(day, power_mw, energy_mwh, efficiency)
     fee = signal * injection
     moved = injection.abs().sum()
     total = float(fee.sum())

@@ -41,6 +41,44 @@ def test_battery_only_operates_when_beneficial_and_resets_local_day():
     assert result.hourly.injection_mw.tolist() == [-1, 1, -1, 1]
 
 
+def test_battery_cannot_discharge_before_charging():
+    result = asset_fees(signal([-10, 10]), "battery", 1, 1, 0.9)
+    assert result.hourly.injection_mw.tolist() == [0, 0]
+    assert result.summary["total_eur"] == 0
+
+
+def test_battery_capacity_power_exclusions_and_multiple_cycles():
+    result = asset_fees(signal([10, np.nan, -10, 8, -8, 10]), "battery", 2, 1.5, 0.8)
+    injection = result.hourly.injection_mw.to_numpy()
+    assert injection == pytest.approx([-1.5, 0, 1.2, -1.5, 1.2, 0])
+    soc = np.cumsum(np.maximum(-injection, 0) - np.maximum(injection, 0) / 0.8)
+    assert soc.min() >= -1e-8
+    assert soc.max() <= 1.5 + 1e-8
+    assert soc[-1] == pytest.approx(0)
+    assert np.abs(injection).max() <= 2
+    assert result.summary["total_eur"] == pytest.approx(-48.6)
+
+
+def test_battery_no_simultaneous_charge_discharge_on_single_hour():
+    result = asset_fees(signal([10]), "battery", 1, 1, 0.5)
+    assert result.hourly.injection_mw.tolist() == [0]
+
+
+def test_battery_zero_capacity():
+    assert asset_fees(signal([10, -10]), "battery", 1, 0).hourly.injection_mw.eq(0).all()
+
+
+def test_battery_solver_failure(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "gridfee.signal.asset.milp",
+        lambda **kwargs: SimpleNamespace(success=False, message="solver failure"),
+    )
+    with pytest.raises(RuntimeError, match="Battery scheduling failed.*solver failure"):
+        asset_fees(signal([10, -10]), "battery", 1, 1)
+
+
 @pytest.mark.parametrize("values", [[], [np.nan, np.nan]])
 def test_empty_or_missing_signal(values):
     result = asset_fees(signal(values), "battery", 1, 2)

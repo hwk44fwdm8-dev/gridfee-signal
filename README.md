@@ -234,8 +234,10 @@ what a constant load, generator or battery would have paid/earned under that
 run's modelled fee signal. Positive fees mean the asset pays; negative fees mean
 it earns (signal × net injection, feed-in positive). Missing-signal and unserved
 hours are excluded. Battery operation is an idealised daily perfect-foresight
-best case, with one charge-energy budget per day, round-trip losses, no
-inter-day energy transfer and no chronological state-of-charge constraint.
+best case, respecting chronological state of charge within the usable energy
+capacity, with empty start/end each day and round-trip losses on discharge.
+A daily HiGHS mixed-integer optimisation minimises fees without simultaneous
+charging/discharging; multiple cycles are allowed, but no inter-day energy transfer.
 
 ## Network config
 

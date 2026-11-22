@@ -469,14 +469,15 @@ def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
     power = st.number_input("Power (MW)", min_value=0.01, value=1.0)
     energy, efficiency = 0.0, 0.9
     if kind == "battery":
-        energy = st.number_input("Charge energy budget (MWh)", min_value=0.0, value=2.0)
+        energy = st.number_input("Energy capacity (MWh)", min_value=0.0, value=2.0)
         efficiency = st.number_input(
             "Round-trip efficiency", min_value=0.01, max_value=1.0, value=0.9
         )
         st.caption(
             "Idealised best case: perfect foresight of each Europe/Berlin day's signal; "
-            "at most one cycle per day, no inter-day energy transfer or chronological "
-            "state-of-charge constraint. Discharge energy = charge energy × efficiency."
+            "chronological state of charge stays within usable capacity and starts/ends "
+            "each day empty. No simultaneous charging/discharging; multiple cycles allowed. "
+            "Losses apply on discharge."
         )
     hours = tables.shadow_prices.index
     years = ", ".join(map(str, sorted(set(hours.tz_convert(TIMEZONE).year))))
