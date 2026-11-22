@@ -1,0 +1,9 @@
+# ENTSO-E/ENTSOG TYNDP 2024 NT2030, CC BY 4.0; see LICENSE-DATA.md.
+# Prices: Matrix 2024; EUR/GJ * 3.6. CO2: NT2030 kg/GJ * 0.0036.
+# Non-CCS fuel factors; efficiencies and VOM unchanged from generation_costs_2023.csv.
+# Hydrogen is mapped to gas in replay: the gas cost therefore does not distinguish H2.
+technology,fuel_eur_per_mwh_th,efficiency,co2_t_per_mwh_th,vom_eur_per_mwh,co2_price_eur_per_t
+nuclear,6.051054545454545,0.326,0,3.5464,113.4
+lignite,6.48,0.33,0.3636,3.2612,113.4
+gas,27,0.57,0.18566590258773777,4.5504,113.4
+hard_coal,6.396724667349028,0.356,0.3384,3.2612,113.4

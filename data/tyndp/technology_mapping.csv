@@ -1,0 +1,61 @@
+code,description,category,multiplier
+1,Nuclear,nuclear,1
+2,Lignite old 1,lignite,1
+3,Lignite old 2,lignite,1
+4,Lignite new,lignite,1
+5,Lignite CCS,lignite,1
+6,Hard coal old 1,hard_coal,1
+7,Hard coal old 2,hard_coal,1
+8,Hard coal new,hard_coal,1
+9,Hard coal CCS,hard_coal,1
+10,Gas conventional old 1,gas,1
+11,Gas conventional old 2,gas,1
+12,Gas CCGT old 1,gas,1
+13,Gas CCGT old 2,gas,1
+14,Gas CCGT new,gas,1
+15,Gas CCGT CCS,gas,1
+17,Gas OCGT old,gas,1
+18,Gas OCGT new,gas,1
+19,Gas CCGT present 1,gas,1
+20,Gas CCGT present 2,gas,1
+21,Light oil,other_conventional,1
+22,Heavy oil old 1,other_conventional,1
+23,Heavy oil old 2,other_conventional,1
+24,Oil shale old,other_conventional,1
+25,Oil shale new,other_conventional,1
+26,Run of river,hydro,1
+27,Reservoir,hydro,1
+28,Open loop turbine,pumped_storage,1
+-28,Open loop pumping,load,1
+29,Closed loop turbine,pumped_storage,1
+-29,Closed loop pumping,load,1
+30,Pondage,hydro,1
+31,Wind onshore,wind_onshore,1
+32,Wind offshore,wind_offshore,1
+33,Solar photovoltaic,solar,1
+34,Solar thermal,solar,1
+35,Other RES aggregate replaced by PEMMDB components,other_renewable,1
+36,Other non-renewable,other_conventional,1
+37,Lignite biofuel,biomass,1
+38,Hard coal biofuel,biomass,1
+39,Gas biofuel,biomass,1
+40,Light oil biofuel,biomass,1
+41,Heavy oil biofuel,biomass,1
+42,Oil shale biofuel,biomass,1
+44,Battery discharge,pumped_storage,1
+-44,Battery charging,load,1
+-45,Electrolyser,load,1
+46,Hydrogen fuel cell,gas,1
+52,Hydrogen CCGT,gas,1
+DSRe,Explicit demand response,load,-1
+DSRi,Implicit demand response,load,-1
+LOAD,Native demand,load,1
+Dump,Dumped energy,load,1
+ENS,Unserved energy,load,-1
+Balance,Published balance diagnostic,ignore,0
+Mgl Cost,Published marginal cost diagnostic,ignore,0
+biomass,Small biomass from PEMMDB,biomass,1
+geothermal,Geothermal from PEMMDB,other_renewable,1
+marine,Marine from PEMMDB,other_renewable,1
+waste,Waste from PEMMDB,other_conventional,1
+other,Unspecified RES from PEMMDB,other_renewable,1
