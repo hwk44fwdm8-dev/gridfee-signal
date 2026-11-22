@@ -469,3 +469,14 @@ What is not modelled and matters for a comparison with the published volume:
 redispatch for voltage, countertrading, measures abroad, the grid reserve, and that
 TSOs plan redispatch on forecasts with a security margin (n-1 is only in the line
 margins of the network).
+
+**2023 on the 38-region network** (inputs as in the section above, default markup and
+curtailment cost): the grid run raises 1.12 TWh and lowers 1.28 TWh in 1,424 hours, at
+101 million EUR by the assumptions above. The TSOs published 10.1 TWh raised and
+10.0 TWh lowered as current-driven redispatch for 2023, so the model reaches about an
+eighth of the real volume. In 474 hours (160 GWh) load is left unserved, which is why
+more is lowered than raised; in the other 8,282 hours the model moves 0.68 TWh each way
+in 950 hours against 8.5 TWh raised and 8.2 TWh lowered in 5,709 hours, and 845 of the
+950 are hours with real redispatch (correlation of the hourly volumes 0.41). The gap
+is what the single run's check already showed: most real congestion is on single
+circuits and inside the regions, which a 38-region network does not see.
