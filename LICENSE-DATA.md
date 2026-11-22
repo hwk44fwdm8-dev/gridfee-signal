@@ -19,3 +19,14 @@ in this repository.
 
 Data downloaded by `gridfee collect` comes from SMARD (Bundesnetzagentur, CC BY 4.0)
 and is not stored in the repository.
+
+## `data/shares/`
+
+`population_shares.csv` is derived from Eurostat's table `demo_r_d2jan` (© European
+Union; Eurostat data may be reused with the source named).
+
+`capacity_shares.csv`, `residual_shares.csv` and the MW in `capacity_by_zone.csv` are
+derived from the Marktstammdatenregister (© Bundesnetzagentur,
+[Datenlizenz Deutschland – Namensnennung – Version 2.0](https://www.govdata.de/dl-de/by-2-0)),
+full export of 1 October 2026. The data was aggregated to zones; no unit data is
+included in this repository.

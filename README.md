@@ -15,9 +15,10 @@ backcast runs end to end. Scenarios and dispatch are not built yet (see
 [Roadmap](#roadmap)).
 
 **Read before using results:** the lines between the 22 zones are an assumption derived
-from open data ([docs/NETWORK.md](docs/NETWORK.md)), and the shares that place load and
-generation in the zones are placeholders. With both, the 2023 backcast finds no
-congestion between German zones and a neutral fee signal everywhere
+from open data ([docs/NETWORK.md](docs/NETWORK.md)). The shares that place load and
+generation in the zones are placeholders unless the files in `data/shares/` (Eurostat
+population, MaStR capacity) are passed. Either way the 2023 backcast finds almost no
+congestion between German zones and a neutral fee signal in more than 99.6 % of hours
 ([docs/METHODOLOGY.md](docs/METHODOLOGY.md)).
 
 ## Quick start
@@ -95,9 +96,10 @@ report per TSO zone.
 
 Read [docs/DATA.md](docs/DATA.md) before using the output. In short:
 
-- **Shares are placeholders.** No share files ship yet, so every zone of a TSO zone gets
-  the same share. The output flags this (`shares.csv`, column `placeholder`, and a
-  warning). Placeholder results do not show where power is produced or used.
+- **Shares are placeholders unless given.** Without share files every zone of a TSO
+  zone gets the same share, and the output flags this (`shares.csv`, column
+  `placeholder`, and a warning). `data/shares/` holds shares built from Eurostat
+  population and the MaStR register; where offshore wind comes ashore is an assumption.
 - **Four zones' TSO differs from the drafts** and several zones are split between two
   TSOs; see [TSO_SOURCES.md](data/networks/de22/TSO_SOURCES.md).
 
@@ -169,7 +171,8 @@ from PyPSA-Eur.
 
 - The 22-zone lines are an assumption derived from OpenStreetMap-based data, and DC
   cables are treated as lines; see [docs/NETWORK.md](docs/NETWORK.md).
-- The backcast is not a market model, and its zone shares are placeholders; see
+- The backcast is not a market model, and its zone shares are placeholders unless the
+  files in `data/shares/` are passed; see
   [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
 
 `SCENARIOS.md` and `LIMITATIONS.md` follow with the modules they describe.

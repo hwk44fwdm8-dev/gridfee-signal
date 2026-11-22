@@ -1,0 +1,31 @@
+# Share of each zone in Germany's capacity other than wind and solar.
+# Source: MaStR full export Gesamtdatenexport_20261001_26.1.zip, units in operation on 2023-07-01; net capacity of
+# combustion, biomass, hydro, nuclear and geothermal units without emergency
+# generators. Large units have no municipality key in the public export and take
+# the zone of the other units in their district (Landkreis). ASSUMPTION: generation
+# follows capacity, whatever the fuel. Units in the storage file of MaStR
+# (batteries, pumped hydro) are not included.
+# Built by scripts/build_zone_shares.py; see docs/DATA.md.
+zone_id,share
+DE01,0.023558516
+DE02,0.068613802
+DE03,0.014365688
+DE04,0.06324209
+DE05,0.035444892
+DE06,0.011394947
+DE07,0.026157975
+DE08,0.058513908
+DE09,0.039612461
+DE10,0.11794802
+DE11,0.186017619
+DE12,0.032414356
+DE13,0.087493213
+DE14,0.01234609
+DE15,0.015310818
+DE16,0.043100972
+DE17,0.031889643
+DE18,0.023256987
+DE19,0.043416953
+DE20,0.048748696
+DE21,0.009665004
+DE22,0.007487352

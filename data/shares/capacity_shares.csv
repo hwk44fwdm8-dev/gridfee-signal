@@ -1,0 +1,64 @@
+# Share of each zone in the installed capacity of its TSO zone (zones.csv).
+# Source: MaStR full export Gesamtdatenexport_20261001_26.1.zip, units in operation on 2023-07-01; gross capacity.
+# Zone by municipality key (ags_nuts2.csv). wind_offshore: ASSUMPTION on where it
+# comes ashore (offshore_landing.csv).
+# Built by scripts/build_zone_shares.py; see docs/DATA.md.
+technology,zone_id,share
+wind_onshore,DE01,0.00080871
+wind_onshore,DE02,0.40995748
+wind_onshore,DE03,0.17590938
+wind_onshore,DE04,0.064293276
+wind_onshore,DE05,0.261068002
+wind_onshore,DE06,0.087963152
+wind_onshore,DE07,0.315357782
+wind_onshore,DE08,0.356429146
+wind_onshore,DE09,0.121796973
+wind_onshore,DE10,0.416598442
+wind_onshore,DE11,0.187929699
+wind_onshore,DE12,0.085180426
+wind_onshore,DE13,0.010275426
+wind_onshore,DE14,0.007088893
+wind_onshore,DE15,0.007858485
+wind_onshore,DE16,0.096012868
+wind_onshore,DE17,0.348506064
+wind_onshore,DE18,0.046965796
+wind_onshore,DE19,0.669886695
+wind_onshore,DE20,0.10924058
+wind_onshore,DE21,0.165988888
+wind_onshore,DE22,0.054883837
+wind_offshore,DE01,0.0
+wind_offshore,DE02,0.0
+wind_offshore,DE03,1.0
+wind_offshore,DE04,0.0
+wind_offshore,DE05,0.0
+wind_offshore,DE06,0.0
+wind_offshore,DE07,0.299780178
+wind_offshore,DE08,0.700219822
+wind_offshore,DE09,0.0
+wind_offshore,DE12,0.0
+wind_offshore,DE13,0.0
+wind_offshore,DE14,0.0
+wind_offshore,DE15,0.0
+wind_offshore,DE16,0.0
+solar,DE01,0.012101044
+solar,DE02,0.315048609
+solar,DE03,0.185580552
+solar,DE04,0.162371444
+solar,DE05,0.204614007
+solar,DE06,0.120284345
+solar,DE07,0.084473288
+solar,DE08,0.131043383
+solar,DE09,0.062239086
+solar,DE10,0.41686255
+solar,DE11,0.250281182
+solar,DE12,0.267984983
+solar,DE13,0.253421579
+solar,DE14,0.096689339
+solar,DE15,0.002270186
+solar,DE16,0.101878155
+solar,DE17,0.271862037
+solar,DE18,0.060994231
+solar,DE19,0.325238671
+solar,DE20,0.192178273
+solar,DE21,0.215039213
+solar,DE22,0.267543843
