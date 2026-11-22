@@ -33,6 +33,9 @@ OUTLINE = "#8a8a8a"
 DPI = 150
 # Zones shown by name in the unserved-load figure; the rest are summed as "other".
 MAX_UNSERVED_ZONES = 8
+# Above these counts a heat map has no room for a label per row.
+MAX_LABELLED_ZONES = 60
+MAX_LINE_ROWS = 40
 
 Regions = dict[str, list[np.ndarray]]
 
@@ -175,12 +178,19 @@ def _fill_zones(ax, values: pd.Series, zones, regions, cmap, norm, hide_zero: bo
                 )
             ).set_zorder(2)
     else:
+        marker = _marker(len(values))
         if hide_zero:
             rest = zones.loc[values.index.difference(shown.index)]
-            ax.scatter(rest["lon"], rest["lat"], s=150, color=EMPTY, edgecolors=OUTLINE, zorder=5)
+            ax.scatter(rest["lon"], rest["lat"], color=EMPTY, zorder=5, **marker)
         at = zones.loc[shown.index]
-        ax.scatter(at["lon"], at["lat"], s=150, color=colors, edgecolors=OUTLINE, zorder=5)
+        ax.scatter(at["lon"], at["lat"], color=colors, zorder=5, **marker)
     return plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+
+
+def _marker(count: int) -> dict:
+    """Points that shrink with the number of zones, so that they do not cover each other."""
+    size = min(150.0, max(14.0, 6000.0 / max(count, 1)))
+    return {"s": size, "edgecolors": OUTLINE, "linewidths": 1.0 if size > 60 else 0.3}
 
 
 def _colorbar(figure, mappable, ax, label: str) -> None:
@@ -300,7 +310,11 @@ def _timeseries_signal(signal: pd.DataFrame, zones: pd.DataFrame, threshold: flo
         norm=TwoSlopeNorm(0.0, -size, size),
     )
     bottom.set_facecolor(EMPTY)
-    bottom.set_yticks(np.arange(len(order)) + 0.5, _labels(order, zones), fontsize=7)
+    if len(order) <= MAX_LABELLED_ZONES:
+        bottom.set_yticks(np.arange(len(order)) + 0.5, _labels(order, zones), fontsize=7)
+    else:
+        bottom.set_yticks([])
+        bottom.set_ylabel(f"{len(order):,} zones, north (top) to south")
     bottom.invert_yaxis()
     bottom.set_title(
         "Mean fee signal per day and zone (grey: no hour of the day is in the signal)",
@@ -321,6 +335,10 @@ def _timeseries_lines(tables: ResultTables, threshold: float):
     if daily.empty or not len(daily.columns):
         return None
     daily = daily[daily.sum().sort_values(ascending=False).index]
+    title = "Hours per day in which a line is full and has a price"
+    if len(daily.columns) > MAX_LINE_ROWS:
+        title += f" (the {MAX_LINE_ROWS} lines with the most hours, of {len(daily.columns)})"
+        daily = daily.iloc[:, :MAX_LINE_ROWS]
     figure, ax = plt.subplots(
         figsize=(12, 1.2 + _heatmap_height(len(daily.columns))), constrained_layout=True
     )
@@ -335,7 +353,7 @@ def _timeseries_lines(tables: ResultTables, threshold: float):
     labels = [f"{line} ({hours:,} h)" for line, hours in daily.sum().items()]
     ax.set_yticks(np.arange(len(daily.columns)) + 0.5, labels, fontsize=8)
     ax.invert_yaxis()
-    ax.set_title("Hours per day in which a line is full and has a price", fontsize=11, loc="left")
+    ax.set_title(title, fontsize=11, loc="left")
     figure.colorbar(mesh, ax=ax, pad=0.01, label="hours per day")
     _date_axis(ax)
     return figure

@@ -180,3 +180,30 @@ def test_plot_results_removes_figures_that_no_longer_apply(tables, network_dir, 
     paths = plot_results(served, network, tmp_path)
     assert not (tmp_path / "timeseries_unserved.png").exists()
     assert all(path.exists() for path in paths)
+
+
+def test_plot_results_on_a_network_with_many_zones(tmp_path):
+    from gridfee.plots.figures import MAX_LABELLED_ZONES, MAX_LINE_ROWS, plot_results
+
+    count = max(MAX_LABELLED_ZONES, MAX_LINE_ROWS) + 2
+    ids = [f"Z{i:03d}" for i in range(count)]
+    zones = ["zone_id,name,kind,tso_zone,country,lat,lon"]
+    zones += [f"{z},{z},internal,TenneT,,{48 + i * 0.05},{8 + (i % 7)}" for i, z in enumerate(ids)]
+    lines = ["line_id,from_zone,to_zone,susceptance_mw_per_rad,capacity_mw"]
+    lines += [
+        f"L{i:03d},{a},{b},1000,100" for i, (a, b) in enumerate(zip(ids[:-1], ids[1:], strict=True))
+    ]
+    directory = tmp_path / "network"
+    directory.mkdir()
+    (directory / "zones.csv").write_text("\n".join(zones) + "\n")
+    (directory / "lines.csv").write_text("\n".join(lines) + "\n")
+
+    hours = pd.date_range("2023-01-01", periods=48, freq="h", tz="Europe/Berlin", name="hour")
+    line_ids = [f"L{i:03d}" for i in range(count - 1)]
+    signal = pd.DataFrame(1.0, index=hours, columns=ids)
+    shadow = pd.DataFrame(5.0, index=hours, columns=line_ids)
+    flows = pd.DataFrame(100.0, index=hours, columns=line_ids)
+    paths = plot_results(
+        ResultTables(signal, shadow, flows), load_network(directory), tmp_path / "plots"
+    )
+    assert {path.name for path in paths} >= {"timeseries_signal.png", "timeseries_lines.png"}
