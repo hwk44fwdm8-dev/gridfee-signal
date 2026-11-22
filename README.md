@@ -17,11 +17,14 @@ backcast runs end to end. Scenarios and dispatch are not built yet (see
 **Read before using results:** the lines between the 22 zones are an assumption derived
 from open data ([docs/NETWORK.md](docs/NETWORK.md)). The shares that place load and
 generation in the zones are placeholders unless the files in `data/shares/` (Eurostat
-population, MaStR capacity) are passed. Either way, and also with hourly wind and solar
-per zone from ERA5 weather data (`data/weather/`), the 2023 backcast gives a neutral fee
-signal in more than 99.6 % of hours. Lines between German zones do reach their capacity
-in over 1,000 hours, but without a price, because all generation other than wind and
-solar has one cost ([docs/METHODOLOGY.md](docs/METHODOLOGY.md)).
+population, MaStR capacity) are passed. With one cost for all generation other than
+wind and solar, the 2023 backcast gives a neutral fee signal in more than 99.6 % of
+hours. With one cost per fuel (`--generation-shares`, `--generation-costs`) it is not
+neutral in 599 hours (6.8 %), mostly because of full lines to France; a line between
+German zones has a price in 54 hours. The costs are an assumption, and the dispatch
+they give is far from the observed one (gas 123 TWh instead of 51, lignite 36 instead
+of 78), so the result shows how the signal reacts, not what 2023 was
+([docs/METHODOLOGY.md](docs/METHODOLOGY.md)).
 
 ## Quick start
 

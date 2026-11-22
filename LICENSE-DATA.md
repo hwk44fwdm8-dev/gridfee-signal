@@ -25,11 +25,22 @@ and is not stored in the repository.
 `population_shares.csv` is derived from Eurostat's table `demo_r_d2jan` (© European
 Union; Eurostat data may be reused with the source named).
 
-`capacity_shares.csv`, `residual_shares.csv` and the MW in `capacity_by_zone.csv` are
+`capacity_shares.csv`, `residual_shares.csv`, `generation_shares.csv` and the MW in `capacity_by_zone.csv` are
 derived from the Marktstammdatenregister (© Bundesnetzagentur,
 [Datenlizenz Deutschland – Namensnennung – Version 2.0](https://www.govdata.de/dl-de/by-2-0)),
 full export of 1 October 2026. The data was aggregated to zones; no unit data is
 included in this repository.
+
+## `data/costs/`
+
+`generation_costs_2023.csv` holds 14 values (efficiencies, CO2 intensities, variable
+costs, the lignite and nuclear fuel prices) read from `outputs/costs_2025.csv` of PyPSA
+[technology-data](https://github.com/PyPSA/technology-data) v0.13.4. That repository
+releases its scripts under GPLv3 and states no licence for its output files ("different
+licenses and terms of use may apply to the various input data"); the values are cited
+here with their source. The 2023 prices are single published figures (Verein der
+Kohlenimporteure, Jahresbericht 2024; Monitoring der Energiewende in
+Baden-Württemberg, Statusbericht 2024), also cited with their source.
 
 ## `data/weather/`
 

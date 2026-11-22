@@ -8,7 +8,13 @@ from pathlib import Path
 import pandas as pd
 import typer
 
-from gridfee.backcast import BackcastError, build_backcast_inputs, run_backcast
+from gridfee.backcast import (
+    BackcastError,
+    build_backcast_inputs,
+    read_generation_costs,
+    read_generation_shares,
+    run_backcast,
+)
 from gridfee.data import smard
 from gridfee.flows import OPFError, OPFResult, run_dc_opf
 from gridfee.injections import build_historical_injections, check_energy_balance, read_shares
@@ -279,6 +285,18 @@ def backcast(
         help="Marginal cost of generation other than wind and solar, EUR/MWh. The fee "
         "signal scales with it; the default of 1 gives a signal in units of this cost.",
     ),
+    generation_shares: Path | None = typer.Option(
+        None,
+        help="CSV technology,zone_id,share: each zone's share of Germany's capacity per fuel "
+        "(data/shares/generation_shares.csv). Generation other than wind and solar is then "
+        "modelled per fuel, and --residual-shares and --residual-cost are not used.",
+    ),
+    generation_costs: Path | None = typer.Option(
+        None,
+        help="CSV of fuel price, efficiency, CO2 and other variable cost per technology "
+        "(data/costs/generation_costs_2023.csv); needs --generation-shares. Fuels in it are "
+        "dispatched at their cost, the others feed in their observed national output.",
+    ),
     load_shedding_cost: float = typer.Option(
         1000.0, help="Cost of unserved load in EUR/MWh, which keeps every hour solvable."
     ),
@@ -317,6 +335,7 @@ def backcast(
             if capacity_factors is None
             else read_capacity_factors(capacity_factors),
         )
+        costs = None if generation_costs is None else read_generation_costs(generation_costs)
         inputs = build_backcast_inputs(
             network,
             zonal,
@@ -328,6 +347,8 @@ def backcast(
             else pd.read_csv(residual_shares, comment="#", dtype={"zone_id": str}).set_index(
                 "zone_id"
             )["share"],
+            None if generation_shares is None else read_generation_shares(generation_shares),
+            costs,
         )
         subset = None
         if hours is not None:
@@ -366,6 +387,19 @@ def backcast(
                 f"Wind and solar feed-in is split over the zones of each TSO zone hour by hour "
                 f"with the capacity factors in {capacity_factors.name}, built from weather data "
                 "with a generic power curve (an ASSUMPTION, docs/DATA.md)."
+            )
+        if generation_shares is not None:
+            notes.append(
+                "Generation other than wind and solar is modelled per fuel and placed by each "
+                f"zone's share of the fuel's capacity ({generation_shares.name}, from MaStR)."
+            )
+        if costs is not None:
+            notes.append(
+                "Dispatched at one cost per fuel (EUR/MWh, an ASSUMPTION from "
+                f"{generation_costs.name}, docs/DATA.md): "
+                + ", ".join(f"{fuel} {cost:,.1f}" for fuel, cost in costs.sort_values().items())
+                + ". All other fuels feed in their observed national output. This is not a "
+                "market model: no start-up costs, heat demand, outages or reserves."
             )
         for row in inputs.clipped_exchange.itertuples():
             notes.append(

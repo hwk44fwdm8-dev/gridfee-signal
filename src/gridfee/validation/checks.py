@@ -201,7 +201,9 @@ def check_residual_generation(
     observed = _same_hours(generation_de, dispatch_mw, "national generation")
     res = [fuel for fuel in TSO_RES_FILTERS if fuel in observed.columns]
     observed_residual = observed.drop(columns=res).sum().sum()
-    modelled_residual = by_kind.get(RESIDUAL, 0.0)
+    # One generator kind for all of it, or one per fuel (gridfee.backcast).
+    fuels = [fuel for fuel in observed.columns.difference(res) if fuel in by_kind]
+    modelled_residual = by_kind.get(RESIDUAL, 0.0) + sum(by_kind[fuel] for fuel in fuels)
     rows = [
         _row(
             "generation other than wind and solar",
@@ -212,12 +214,12 @@ def check_residual_generation(
             abs(modelled_residual - observed_residual) / observed_residual,
         )
     ]
-    for fuel in res:
+    for fuel in [*fuels, *res]:
         if fuel in by_kind:
             energy = observed[fuel].sum()
             rows.append(
                 _row(
-                    f"{fuel} fed in",
+                    f"{fuel} generated" if fuel in fuels else f"{fuel} fed in",
                     "Germany",
                     energy / _MWH_PER_TWH,
                     by_kind[fuel] / _MWH_PER_TWH,

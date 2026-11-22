@@ -129,6 +129,7 @@ gridfee backcast --year 2023 --population-shares data/shares/population_shares.c
 | `population_shares.csv` | zone's share of its TSO zone's population, used for demand | Eurostat `demo_r_d2jan`, NUTS2, 1 January 2023 |
 | `capacity_shares.csv` | zone's share of its TSO zone's onshore wind, offshore wind and solar capacity | MaStR |
 | `residual_shares.csv` | zone's share of Germany's capacity other than wind and solar | MaStR |
+| `generation_shares.csv` | zone's share of Germany's capacity per fuel (`--generation-shares`) | MaStR |
 | `capacity_by_zone.csv` | the population and MW behind the shares | both |
 | `ags_nuts2.csv`, `offshore_landing.csv` | lookups used by the build script | see below |
 
@@ -165,9 +166,52 @@ a URL, which takes about 15 minutes.
   capacity whatever the fuel, so a lignite plant and a peaking gas turbine of the same
   size count the same.
 
+- **Per fuel (`generation_shares.csv`):** the same units, split by MaStR's
+  `Energietraeger` into SMARD's national series, plus pumped storage from MaStR's
+  storage file (6.4 GW; plants abroad that feed into the German grid are not included).
+  ASSUMPTION: the mapping, since SMARD publishes no list of units per series. "Other
+  conventional" is mineral oil, other gases, non-biogenic waste, heat and hydrogen;
+  "other renewable" is geothermal, mine gas, sewage sludge and pressure relief.
+  Nuclear counts the three reactors in operation on 1 January 2023 (they ran until
+  15 April).
+
 **Limits.** Capacity shares place feed-in in proportion to installed capacity, so wind
 is assumed to blow equally within a TSO zone. Population places demand without regard
 to industry. Each zone still belongs to one TSO zone only (see above).
+
+## Generation costs per fuel (ASSUMPTION)
+
+`data/costs/generation_costs_2023.csv` gives one cost per fuel for
+`gridfee backcast --generation-costs`:
+
+    cost = (fuel price + CO2 price x CO2 per MWh of heat) / efficiency + other variable cost
+
+| Fuel | Fuel price, EUR/MWh heat | Efficiency | Cost, EUR/MWh electricity |
+| --- | --- | --- | --- |
+| Nuclear | 3.41 | 0.326 | 14.0 |
+| Gas | 42.01 | 0.57 | 107.3 |
+| Lignite | 3.30 | 0.33 | 116.2 |
+| Hard coal | 26.16 | 0.356 | 155.6 |
+
+- **CO2 price:** 83.47 EUR/t, the mean EEX settlement price of 2023 (Verein der
+  Kohlenimporteure, Jahresbericht 2024, "Importkohlemarkt auf einen Blick").
+- **Hard coal:** 213 EUR/t SKE, the border price of power plant coal in 2023 as carried
+  forward by the Verein der Kohlenimporteure (same table); 1 t SKE = 8.141 MWh.
+- **Gas:** 11,670 EUR/TJ, the border price of natural gas in 2023 as quoted in
+  "Monitoring der Energiewende in Baden-Württemberg, Statusbericht 2024". The original
+  statistic was not read, and the value is not converted between upper and lower
+  heating value.
+- **Lignite and nuclear fuel, efficiencies, CO2 per MWh of heat, other variable cost:**
+  PyPSA [technology-data](https://github.com/PyPSA/technology-data) v0.13.4,
+  `outputs/costs_2025.csv`. These are generic values for model studies, not 2023 data
+  for German plants. Every gas plant counts as a combined-cycle plant.
+- **Fuels without a row** (biomass, hydro, pumped storage, other conventional, other
+  renewable) are not dispatched by cost: they feed in their observed national output.
+  Their output follows subsidies, heat demand, water or storage operation, not a fuel
+  price.
+
+The order of gas and lignite depends on these choices: with a gas efficiency of 0.52
+instead of 0.57, gas would cost more than lignite.
 
 ## Hourly capacity factors from ERA5
 

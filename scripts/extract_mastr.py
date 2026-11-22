@@ -46,10 +46,14 @@ FIELDS = [
     "Hauptbrennstoff",
     "Notstromaggregat",
     "Einspeisungsart",
+    "Technologie",
 ]
+STORAGE = "EinheitenStromSpeicher"
+PUMPED_STORAGE = "1537"  # catalogue id of "Pumpspeicher"; the other storage units are batteries
 MEMBERS = re.compile(
     r"^(EinheitenWind|EinheitenSolar_\d+|EinheitenVerbrennung|EinheitenBiomasse|EinheitenWasser"
-    r"|EinheitenKernkraft|EinheitenGeothermieGrubengasDruckentspannung|Katalogwerte)\.xml$"
+    r"|EinheitenKernkraft|EinheitenGeothermieGrubengasDruckentspannung"
+    r"|EinheitenStromSpeicher_\d+|Katalogwerte)\.xml$"
 )
 
 
@@ -133,7 +137,8 @@ def extract_member(source: str, name: str, out_dir: Path) -> None:
                 columns = list(row) if name.startswith("Katalog") else FIELDS
                 writer = csv.DictWriter(out, columns, extrasaction="ignore")
                 writer.writeheader()
-            writer.writerow(row)
+            if not name.startswith(STORAGE) or row.get("Technologie") == PUMPED_STORAGE:
+                writer.writerow(row)
             element.clear()
     partial.rename(target)
     print(f"wrote {target}", flush=True)
@@ -160,7 +165,7 @@ def main() -> None:
     with open_export(args.source) as export:
         names = sorted(
             (name for name in export.namelist() if MEMBERS.match(name)),
-            key=lambda name: name.startswith("EinheitenSolar"),
+            key=lambda name: name.startswith(("EinheitenSolar", STORAGE)),
         )
     with ThreadPoolExecutor(args.workers) as pool:
         list(pool.map(lambda name: extract_member(args.source, name, args.out), names))
