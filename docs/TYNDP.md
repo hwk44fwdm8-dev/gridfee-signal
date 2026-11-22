@@ -44,9 +44,15 @@ renewables). Each neighbour's signed exchange is split using each TSO column's
 Luxembourg nodes combine to LU. Unknown or unroutable nonzero neighbours stop
 conversion before writing SMARD tables; national exchanges are saved separately
 for diagnosis. In particular, UK and new offshore hubs have no historical SMARD
-routing. They must not be dropped or assigned to an arbitrary TSO. Until their
-routing is specified this published workbook cannot produce a complete backcast
-input set under the historical routing rule.
+routing. `data/tyndp/border_routing.csv` supplies explicit fallbacks only where
+the original neighbour has no historical column: Bornholm (DKBH) is added to
+50Hertz_DK2; UK (NeuConnect) is added to TenneT_NO2, a geographical North Sea
+proxy using the existing NordLink boundary at Wilster. This does not represent
+physical UK-to-Norway trade: it preserves the UK schedule without adding a new
+boundary or changing the network. Its flow is combined with Norway's for
+backcast routing and capacity clipping. The table records the approved routing
+assumptions, not published SMARD observations. Existing historical routing takes
+precedence; all other unrouted nonzero neighbours still stop conversion.
 
 `generation_costs_2030.csv` retains 2023 efficiencies and VOM; fuel and CO2 values
 are from TYNDP Matrix 2024 and NT2030 emission factors. Monthly prices repeat the

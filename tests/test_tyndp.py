@@ -83,6 +83,33 @@ def test_unknown_border_reported(inputs):
     assert missing == ["UK"]
 
 
+def test_border_routing(inputs):
+    market, exchanges, mapping, raw = inputs
+    reference = smard.read_table(raw, "physical_flows_tso", 2023)
+    reference["50Hertz_DK2"] = [1, 1]
+    reference.to_csv(raw / smard.table_filename("physical_flows_tso", 2023))
+    exchanges["DE00->DKE1"] = -2
+    exchanges["DE00->DKBH"] = -3
+    exchanges["DE00->UK00"] = -4
+    market["DE00_LOAD"] += 9
+    routing = pd.DataFrame(
+        [("DKBH", "50Hertz", "DK2"), ("UK", "TenneT", "NO2"), ("FR", "TenneT", "NO2")],
+        columns=["neighbour", "tso", "smard_neighbour"],
+    )
+    tables, _, _, missing = replay(market, exchanges, mapping, raw, 2030, border_routing=routing)
+    assert not missing
+    flows = tables["physical_flows_tso"]
+    assert flows["50Hertz_DK2"].eq(-5).all()
+    assert flows["TenneT_NO2"].eq(-4).all()
+    assert flows["50Hertz_FR"].eq(-2.5).all()
+    assert flows.sum(axis=1).eq(-19).all()
+    with pytest.raises(ValueError, match="duplicate border routing"):
+        replay(*inputs, 2030, border_routing=pd.concat([routing, routing]))
+    exchanges = exchanges.rename(columns={"DE00->UK00": "DE00->NEW"})
+    _, _, _, missing = replay(market, exchanges, mapping, raw, 2030, border_routing=routing)
+    assert missing == ["NEW"]
+
+
 def workbook(path):
     book = openpyxl.Workbook()
     book.remove(book.active)

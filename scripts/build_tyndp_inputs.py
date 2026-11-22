@@ -14,6 +14,9 @@ def main():
     parser.add_argument("--plants", type=Path, required=True, help="DE00 PEMMDB workbook")
     parser.add_argument("--raw", type=Path, required=True)
     parser.add_argument("--mapping", type=Path, default=Path("data/tyndp/technology_mapping.csv"))
+    parser.add_argument(
+        "--border-routing", type=Path, default=Path("data/tyndp/border_routing.csv")
+    )
     parser.add_argument("--scenario", default="NT")
     parser.add_argument("--year", type=int, required=True)
     parser.add_argument("--climate-year", type=int, required=True)
@@ -29,6 +32,7 @@ def main():
         args.raw,
         args.year,
         args.reference_year,
+        border_routing=pd.read_csv(args.border_routing),
     )
     args.out.mkdir(parents=True, exist_ok=True)
     print("Annual generation TWh\n" + (tables["generation_de"].sum() / 1e6).to_string())

@@ -94,7 +94,15 @@ def split_other_res(market, plants, scenario, year):
         workbook.close()
 
 
-def replay(market, exchanges, mapping, raw, year, reference_year=2023):
+def replay(market, exchanges, mapping, raw, year, reference_year=2023, border_routing=None):
+    overrides = {}
+    if border_routing is not None:
+        if border_routing.neighbour.duplicated().any():
+            raise ValueError("duplicate border routing")
+        for row in border_routing.itertuples(index=False):
+            if row.tso not in smard.TSO_ZONES or not isinstance(row.smard_neighbour, str):
+                raise ValueError("invalid border routing destination")
+            overrides[row.neighbour] = f"{row.tso}_{row.smard_neighbour}"
     if market.empty or not market.index.equals(exchanges.index):
         raise ValueError("market and exchange hours must be nonempty and identical")
     if list(market.index) != list(range(1, len(market) + 1)):
@@ -157,6 +165,10 @@ def replay(market, exchanges, mapping, raw, year, reference_year=2023):
     flows = pd.DataFrame(0.0, index=market.index, columns=reference.columns)
     for neighbour, values in national.items():
         columns = [c for c in reference if c.split("_", 1)[1] == neighbour]
+        if not columns and neighbour in overrides:
+            column = overrides[neighbour]
+            flows[column] = flows.get(column, 0.0) + values
+            continue
         totals = reference[columns].abs().sum()
         if not totals.sum() > 0:
             if values.abs().max() > 0:
