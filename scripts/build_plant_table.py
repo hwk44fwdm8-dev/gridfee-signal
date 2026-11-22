@@ -163,8 +163,9 @@ def build_table(
 ) -> pd.DataFrame:
     """One row per unit of ``min_mw`` and more; smaller ones summed per place.
 
-    Small units are summed per technology, zone, municipality (or district) and
-    position, and take their municipality's position where it is known.
+    Small units are summed per technology, zone, municipality (or district),
+    position and grid connection, and take their municipality's position where it
+    is known.
     """
     table = units[
         ["plant_id", "name", "technology", "capacity_mw", "state", "district", "ags", "zone"]
@@ -178,6 +179,7 @@ def build_table(
         table.loc[home, "lon"] = table.loc[home, "ags"].map(municipalities["lon"])
         table.loc[home, "location_basis"] = "municipality"
     keys = ["technology", "zone", "state", "district", "ags", "lat", "lon", "location_basis"]
+    keys.append("grid_connection")
     summed = (
         table[small]
         .groupby(keys, dropna=False, as_index=False)

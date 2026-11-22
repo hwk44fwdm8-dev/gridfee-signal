@@ -249,6 +249,29 @@ def repository_tables():
     return table, by_zone.set_index("zone_id").drop(columns=["population", "other"])
 
 
+def test_summed_offshore_units_keep_their_grid_connection():
+    units = pd.DataFrame(
+        {
+            "plant_id": ["u1", "u2", "u3"],
+            "name": ["a", "b", "c"],
+            "technology": "wind_offshore",
+            "capacity_mw": [5.0, 5.0, 6.0],
+            "state": "Ausschließliche Wirtschaftszone",
+            "district": None,
+            "ags": None,
+            "zone": "z1",
+            "grid_connection": ["A", "A", "B"],
+        }
+    )
+    position = pd.DataFrame(
+        {"lat": 54.0, "lon": 7.0, "location_basis": "coordinates"}, index=[0, 1, 2]
+    )
+    table = build_table(units, position, min_mw=10.0)
+    assert table["plant_id"].is_unique
+    mw = table.groupby("grid_connection")["capacity_mw"].sum()
+    assert mw.to_dict() == {"A": 10.0, "B": 6.0}
+
+
 def test_plant_table_has_one_row_per_plant_and_a_position_or_missing():
     table, _ = repository_tables()
     assert table["plant_id"].is_unique
