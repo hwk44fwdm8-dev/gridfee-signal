@@ -19,6 +19,14 @@ Errors name the file and the line number.
 
 ## Susceptance
 
+An optional `max_shift_deg` column in `lines.csv` models a controllable phase shifter
+in series with a line. Blank, absent or zero means a plain line; positive values
+allow a shift within plus/minus that many degrees. Both single-run and two-run grid
+dispatch optimise the shift while limiting the combined flow to `capacity_mw`.
+A small absolute movement cost breaks ties; `pst_shift_deg.csv` reports hourly
+shifts, positive in the line's from-to direction. PTDFs used for fees still treat
+these branches as plain lines, without controllable shifts.
+
 In the DC approximation the flow on a line is
 
     flow(from -> to) = susceptance_mw_per_rad * (angle_from - angle_to)

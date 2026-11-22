@@ -259,6 +259,11 @@ def run_two_run_backcast(
         load_shedding_mw=shedding,
         ptdf=grid_runs[0].ptdf,
         objective_eur=float(sum(run.objective_eur for run in grid_runs)),
+        pst_shift_deg=(
+            None
+            if grid_runs[0].pst_shift_deg is None
+            else pd.concat([run.pst_shift_deg for run in grid_runs])
+        ),
     )
     prices = opf.shadow_prices
     unserved = market_unserved > SHEDDING_TOLERANCE_MW

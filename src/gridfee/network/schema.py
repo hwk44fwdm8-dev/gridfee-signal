@@ -64,6 +64,7 @@ class Line(BaseModel):
     to_zone: str
     susceptance_mw_per_rad: float = Field(gt=0, allow_inf_nan=False)
     capacity_mw: float = Field(gt=0, allow_inf_nan=False)
+    max_shift_deg: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def _check_endpoints(self) -> Self:
