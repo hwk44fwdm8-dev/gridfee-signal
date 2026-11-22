@@ -28,7 +28,16 @@ from gridfee.injections import build_historical_injections, check_energy_balance
 from gridfee.injections.weather import read_capacity_factors
 from gridfee.network import NetworkConfigError, ZoneNetwork, load_network, load_zones
 from gridfee.signal import NEUTRAL, SignalError, compute_fee_signal, write_signal
-from gridfee.validation import FAIL, ValidationError, validate_backcast, write_report
+from gridfee.validation import (
+    FAIL,
+    ValidationError,
+    compare_with_redispatch,
+    hourly_redispatch,
+    read_redispatch,
+    render_redispatch_report,
+    validate_backcast,
+    write_report,
+)
 
 DE22 = Path("data/networks/de22")
 # Signals smaller than this are solver noise, not congestion.
@@ -270,6 +279,56 @@ def validate(
         typer.secho(f"Error: {err}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from err
     _finish_validation(*report)
+
+
+@app.command()
+def redispatch(
+    results: Path = typer.Option(
+        ...,
+        help="Directory written by `gridfee backcast` (fee_signal.csv, fee_signal_class.csv, "
+        "shadow_prices.csv).",
+    ),
+    measures: Path = typer.Option(
+        ...,
+        "--redispatch",
+        help="CSV export of netztransparenz.de's redispatch page that covers the backcast "
+        "(docs/DATA.md).",
+    ),
+    network_dir: Path = typer.Option(
+        DE22, "--network", help="Directory with zones.csv and lines.csv."
+    ),
+    out: Path | None = typer.Option(None, help="Report file (default: redispatch.md in results)."),
+) -> None:
+    """Compare the fee signal of a backcast with the redispatch the TSOs published."""
+    out = out or results / "redispatch.md"
+    try:
+        network = load_network(network_dir)
+        signal = _read_signal_table(results, "fee_signal")
+        classes = _read_signal_table(results, "fee_signal_class")
+        comparison = compare_with_redispatch(
+            signal.where(classes != NEUTRAL, 0.0),
+            _read_berlin_hours(results / "shadow_prices.csv"),
+            network.zone_to_tso,
+            hourly_redispatch(read_redispatch(measures)),
+            {line.line_id: (line.from_zone, line.to_zone) for line in network.lines},
+        )
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            render_redispatch_report(
+                comparison, f"Fee signal and published redispatch: {results.name}"
+            ),
+            encoding="utf-8",
+        )
+    except (NetworkConfigError, ValidationError, OSError, ValueError) as err:
+        typer.secho(f"Error: {err}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from err
+    hours = comparison.hours
+    typer.echo(
+        f"{hours.loc['signal', 'hours']:.0f} hours with a fee signal, "
+        f"{hours.loc['signal', 'hours_with_redispatch']:.0f} of them with redispatch "
+        f"(mean {hours.loc['signal', 'mean_redispatch_mwh']:,.0f} MWh per hour; hours "
+        f"without a signal: {hours.loc['neutral', 'mean_redispatch_mwh']:,.0f}). Report in {out}"
+    )
 
 
 @app.command()
@@ -611,6 +670,19 @@ def _finish_validation(checks: pd.DataFrame, report: Path) -> None:
             err=True,
         )
         raise typer.Exit(code=1)
+
+
+def _read_signal_table(results: Path, name: str) -> pd.DataFrame:
+    """Read a table of `write_signal`: the newer of its CSV and its Parquet file."""
+    paths = [p for p in (results / f"{name}.csv", results / f"{name}.parquet") if p.exists()]
+    if not paths:
+        raise FileNotFoundError(f"no {name}.csv or {name}.parquet in {results}")
+    path = max(paths, key=lambda p: p.stat().st_mtime)
+    if path.suffix == ".csv":
+        return _read_berlin_hours(path)
+    frame = pd.read_parquet(path)
+    frame.index = pd.to_datetime(frame.index, utc=True).tz_convert(smard.TIMEZONE)
+    return frame
 
 
 def _read_berlin_hours(path: Path) -> pd.DataFrame:
