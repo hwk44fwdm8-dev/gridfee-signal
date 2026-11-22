@@ -252,6 +252,50 @@ its caveats (name matches not checked one by one, some placed at the mean of the
 neighbours). Regions with one substation put their whole load there (Hamburg: 2.2 % of
 Germany on `hamburg-sued`). Industry is not distinguished from households.
 
+## Plants and their substations
+
+`data/plants/plants_2023.csv` lists the generation units behind
+`data/shares/capacity_by_zone.csv`: the same MaStR export, day (1 July 2023; nuclear
+1 January 2023), technologies and capacities (gross MW for wind and solar, net MW
+otherwise), so its totals per technology and zone are those of the zone shares. Units
+of 1 MW and more have a row each; smaller ones are summed per technology and
+municipality (`units` says how many). Units the zone shares leave out because they have
+no municipality key and no usable district are kept, with an empty `zone_de22` (35.7 MW
+of wind and solar).
+
+```
+python scripts/extract_mastr.py --zip <url or path> --out <mastr dir>
+python scripts/build_plant_table.py --mastr <mastr dir> --plant-list conventional_power_plants_DE.csv
+python scripts/place_plants.py --network data/networks/desub
+```
+
+MaStR's public export has coordinates for most units of 30 kW and more, only the
+municipality for smaller ones, and neither for most large conventional units.
+`location_basis` says which of these gave `lat`/`lon`, and
+`plants_2023_summary.csv` has the MW per technology and basis:
+
+| basis | position | MW |
+| --- | --- | --- |
+| `coordinates` | the unit's own in MaStR, if in Germany or its waters and within 50 km of its municipality | 106,360 |
+| `plant_list` | by BNetzA plant number (block, else plant if its blocks lie within 5 km) from Open Power System Data, Conventional power plants 2020-10-01 | 60,558 |
+| `municipality` | median of MaStR's located units with the same municipality key; all units below 1 MW | 68,204 |
+| `postcode` | the same by postcode | 169 |
+| `district` | ASSUMPTION: the same by district (Landkreis); can be tens of km off | 13,859 |
+| `missing` | none | 0 |
+
+The 13.9 GW placed by district are mostly gas (7.4 GW), hard coal (2.5 GW) and lignite
+(2.2 GW) units that the 2020 plant list does not have under their plant number.
+
+`scripts/place_plants.py` puts each plant on the nearest substation of a network's
+`substations.csv` (tee points take no plants) and writes `plant_substations.csv` and
+`capacity_by_substation.csv` (MW per `substation_id` and technology) next to it. The
+totals per technology are the plants'. ASSUMPTION: the nearest substation is where a
+plant feeds in, whatever its voltage level and whichever lower-voltage grid lies in
+between; capacity-weighted, plants are 3 km (hard coal) to 17 km (wind, biomass) from
+their substation. Offshore wind goes to the substation nearest to its position at sea
+(98 km on average), not to where its cable comes ashore, and a substation's zone can
+differ from the plant's `zone_de22`.
+
 ## Generation costs per fuel (ASSUMPTION)
 
 `data/costs/generation_costs_2023.csv` gives one cost per fuel for
