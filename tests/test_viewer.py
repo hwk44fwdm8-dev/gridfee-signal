@@ -240,6 +240,7 @@ def test_site_asset_demo_and_battery(monkeypatch):
     assert not app.exception
     assert any("perfect foresight" in text.value for text in app.caption)
     assert app.dataframe[-1].value.index.tolist() == ["2023-10"]
+    assert app.dataframe[-1].value.index.name == "Month"
     hourly = app.dataframe[-2].value
     assert len(hourly) == 25
     assert hourly.timestamp_utc.nunique() == 25
@@ -259,3 +260,28 @@ def test_asset_pattern_counts_days_once_across_repeated_hour():
     assert pattern.loc[2, "mean_signal"] == 2
     assert pattern["discharging"].eq(0).all()
     assert viewer._asset_pattern(frame.iloc[:0])["mean_signal"].isna().all()
+
+
+def test_asset_cache_reuses_results_and_invalidates_inputs(monkeypatch):
+    from unittest.mock import Mock
+
+    compute = Mock(wraps=viewer.asset_fees)
+    monkeypatch.setattr(viewer, "asset_fees", compute)
+    viewer._cached_asset_fees.clear()
+    hours = pd.date_range("2023-01-01", periods=2, freq="h", tz="Europe/Berlin")
+    signal = pd.Series([10.0, -10.0], index=hours)
+    args = ["N", signal, "battery", 1.0, 2.0, 0.9]
+    try:
+        first = viewer._cached_asset_fees(*args)
+        second = viewer._cached_asset_fees(*args)
+        pd.testing.assert_frame_equal(first.hourly, second.hourly)
+        assert compute.call_count == 1
+        for index, value in enumerate(["S", signal.iloc[:1], "load", 2.0, 3.0, 0.8]):
+            changed = args.copy()
+            changed[index] = value
+            viewer._cached_asset_fees(*changed)
+        changed_signal = signal + 1
+        viewer._cached_asset_fees("N", changed_signal, "battery", 1.0, 2.0, 0.9)
+        assert compute.call_count == 8
+    finally:
+        viewer._cached_asset_fees.clear()

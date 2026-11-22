@@ -23,7 +23,7 @@ from gridfee.plots import (
     zone_summary,
 )
 from gridfee.plots.summary import TIMEZONE, hourly_unserved
-from gridfee.signal.asset import asset_fees
+from gridfee.signal.asset import AssetResult, asset_fees
 from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
 
 
@@ -460,6 +460,18 @@ def _show_unserved(tables: ResultTables, day: date | None = None) -> None:
     )
 
 
+@st.cache_data(show_spinner="Computing asset fee look-back…", max_entries=64)
+def _cached_asset_fees(
+    site: str,
+    signal: pd.Series,
+    kind: str,
+    power_mw: float,
+    energy_mwh: float,
+    efficiency: float,
+) -> AssetResult:
+    return asset_fees(signal, kind, power_mw, energy_mwh, efficiency)
+
+
 def _asset_export(hourly: pd.DataFrame) -> pd.DataFrame:
     frame = hourly.reset_index(drop=True)
     frame.insert(0, "timestamp_utc", hourly.index.tz_convert("UTC").map(lambda h: h.isoformat()))
@@ -518,7 +530,7 @@ def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
     if tables.unserved_mw is not None:
         unserved = tables.unserved_mw.reindex(hours).gt(0.001).any(axis=1)
         signal.loc[unserved] = np.nan
-    result = asset_fees(signal[selected], kind, power, energy, efficiency)
+    result = _cached_asset_fees(selected, signal[selected], kind, power, energy, efficiency)
     summary = result.summary
     metrics = st.columns(3)
     for column, label, key in zip(
@@ -582,7 +594,7 @@ def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
     monthly = (
         result.hourly["fee_eur"].groupby(result.hourly.index.strftime("%Y-%m")).sum(min_count=1)
     )
-    st.dataframe(monthly.rename("Fee (EUR)"))
+    st.dataframe(monthly.rename_axis("Month").rename("Fee (EUR)"))
 
 
 def main() -> None:
