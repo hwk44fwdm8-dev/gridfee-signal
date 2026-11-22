@@ -47,6 +47,16 @@ FIELDS = [
     "Notstromaggregat",
     "Einspeisungsart",
     "Technologie",
+    # For the per-plant table (scripts/build_plant_table.py)
+    "Postleitzahl",
+    "Ort",
+    "Gemeinde",
+    "NameStromerzeugungseinheit",
+    "NameKraftwerk",
+    "NameKraftwerksblock",
+    "Kraftwerksnummer",
+    "LokationMaStRNummer",
+    "Lage",
 ]
 STORAGE = "EinheitenStromSpeicher"
 PUMPED_STORAGE = "1537"  # catalogue id of "Pumpspeicher"; the other storage units are batteries
