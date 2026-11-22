@@ -34,6 +34,7 @@ _COLUMNS = {
     "GESAMTE_ARBEIT_MWH",
     "ANWEISENDER_UENB",
 }
+_PLANT_COLUMN = "BETROFFENE_ANLAGE"
 # netztransparenz.de writes "TenneT DE", zones.csv "TenneT".
 _TSO_NAMES = {"TenneT DE": "TenneT"}
 _PRICE_TOLERANCE = 1e-6
@@ -60,7 +61,7 @@ def read_redispatch(path: str | Path) -> pd.DataFrame:
 
     Returns one row per measure with ``start`` and ``end`` (UTC), ``reason``, ``tso``
     (the instructing TSO, named as in zones.csv), ``direction`` (+1 feed-in raised,
-    -1 lowered) and ``energy_mwh``.
+    -1 lowered), ``energy_mwh`` and, if the export names it, ``plant``.
     """
     path = Path(path)
     raw = pd.read_csv(path, sep=";", decimal=",", encoding="utf-8-sig", dtype=str)
@@ -84,15 +85,20 @@ def read_redispatch(path: str | Path) -> pd.DataFrame:
             ),
         }
     )
+    if _PLANT_COLUMN in raw.columns:
+        measures["plant"] = raw[_PLANT_COLUMN].str.strip()
     if (measures["end"] <= measures["start"]).any():
         raise ValidationError(f"{path}: measure(s) that end before they start")
     return measures
 
 
-def hourly_redispatch(measures: pd.DataFrame, reason: str = CURRENT_REDISPATCH) -> pd.DataFrame:
-    """Energy per hour (UTC), with columns (tso, direction).
+def hourly_redispatch(
+    measures: pd.DataFrame, reason: str = CURRENT_REDISPATCH, by: str = "tso"
+) -> pd.DataFrame:
+    """Energy per hour (UTC), with columns (``by``, direction).
 
-    A measure's energy is spread evenly over its interval.
+    ``by`` is the column of ``measures`` to sum over, the instructing TSO unless
+    given. A measure's energy is spread evenly over its interval.
     """
     rows = measures[measures["reason"] == reason].reset_index(drop=True)
     hour = pd.Timedelta(hours=1)
@@ -112,9 +118,9 @@ def hourly_redispatch(measures: pd.DataFrame, reason: str = CURRENT_REDISPATCH) 
     )
     energy = rows["energy_mwh"] * overlap / (rows["end"] - rows["start"])
     return (
-        pd.DataFrame({"hour": hours, "tso": rows["tso"], "direction": rows["direction"]})
+        pd.DataFrame({"hour": hours, by: rows[by], "direction": rows["direction"]})
         .assign(energy_mwh=energy)
-        .pivot_table(index="hour", columns=["tso", "direction"], values="energy_mwh", aggfunc="sum")
+        .pivot_table(index="hour", columns=[by, "direction"], values="energy_mwh", aggfunc="sum")
         .fillna(0.0)
     )
 

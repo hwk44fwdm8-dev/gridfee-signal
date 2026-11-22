@@ -396,3 +396,80 @@ plant).
 The export is not in this repository: the site's imprint reserves the copyright and
 names no open licence. The 2023 export has 15,210 measures, 12,929 of them
 current-driven redispatch.
+
+### Plants of the redispatch export on the substations
+
+The export names the plant of each measure (`BETROFFENE_ANLAGE`), not its place in the
+grid. `data/redispatch/plants_2023.csv` lists all 286 names of the 2023 export with
+the substation of `data/networks/desub/substations.csv` they stand at, so that
+redispatch can be summed per substation, NUTS2 region or reporting zone
+(`gridfee.validation.hourly_redispatch_by_location`). The rows are kept by hand;
+`scripts/build_redispatch_plants.py` fills in the substations and has to be rerun
+when the substation list changes. A name is located in one of four ways
+(`located_by`):
+
+- `plant_list`: the name is a plant or block of the list of conventional power plants
+  of Open Power System Data (version 2020-10-01, from the BNetzA Kraftwerksliste),
+  matched by name and block by hand; `plant_list_ids` holds the BNetzA numbers. The
+  plant goes to the substation the list names as its connection point if that is a
+  substation of our list within 20 km (`basis` `network_node`), else to the nearest
+  substation (`nearest`); `distance_km` is the distance. Tee points are not used.
+- `same_site` (**ASSUMPTION**): a unit the 2020 list lacks (Herne 6, Irsching 6 and
+  five more), put at the listed units of the same power station.
+- `substation_name`: the name gives the substation (`OWP UW Büttel`,
+  `SHN Cluster Heide West`, `50H UW Bertikow`).
+- `landing_point` (**ASSUMPTION**): seven offshore wind farms named without their
+  substation, put where their grid connection comes ashore (Lubmin, Bentwisch,
+  Inhausen, Emden/Borssum), from general knowledge and not checked against a TSO
+  document.
+
+Share of the current-driven redispatch of the 2023 export (20,166 GWh, raised plus
+lowered, 31 December 2022 to 1 January 2024), from
+`gridfee redispatch-plants --redispatch <export.csv>`:
+
+| located_by | reason | plant names | GWh | share |
+| --- | --- | --- | --- | --- |
+| plant_list | | 146 | 11,914 | 59.1 % |
+| same_site | | 6 | 196 | 1.0 % |
+| substation_name | | 28 | 6,000 | 29.8 % |
+| landing_point | | 7 | 435 | 2.2 % |
+| **located** | | **187** | **18,546** | **92.0 %** |
+| none | cluster_code | 33 | 627 | 3.1 % |
+| none | abroad | 7 | 533 | 2.6 % |
+| none | market | 1 | 256 | 1.3 % |
+| none | area | 14 | 143 | 0.7 % |
+| none | not_in_plant_list | 6 | 52 | 0.3 % |
+| none | ambiguous, substation_not_in_list, not_identified | 5 | 10 | 0.1 % |
+
+What is not located and what it would take:
+
+- `cluster_code`: 50Hertz's groups of renewable plants (`50H_MNS_CR_LAU_Nord`). The
+  codes look like abbreviations of substations, but no key is published; with
+  50Hertz's key they could be located.
+- `abroad`: Vorarlberger Illwerke (531 GWh, connected at Bürs in Austria) and the
+  TIWAG plants Kühtai and Silz. They are outside the substation list.
+- `market`: `Börse`, trades on the exchange without a place. `area`: a federal state
+  (`EE Niedersachsen`), a distribution grid area (`AMP_WESTNETZ_...`) or a pool.
+- `not_in_plant_list`: plants built after 2020 on a site without a listed unit
+  (Datteln 4, HKW Marzahn and four small ones); a newer plant list with positions
+  would locate them.
+- `ambiguous`: `50H UW Altentreptow` (the list has Altentreptow/Nord and /Sued) and
+  the Schluchsee group (three plants). `substation_not_in_list`: `50H UW Iven`.
+
+Limits of the table:
+
+- Of the located energy, 50.5 % of the year's total is placed by the connection point
+  of the plant list, 31.9 % by name and 9.6 % at the nearest substation. Plants on
+  the 110 kV grid of a distribution system operator have no substation of their own
+  in the list; the nearest one is an approximation. 41 % of the year's energy lies
+  within 5 km of its substation, 16 % between 5 and 10 km, 3 % further away (up to
+  40 km for UPM Schongau).
+- The matches of names to plant list entries were made by hand and not checked
+  against a second source. Positions and connection points are those of the 2020
+  list; one wrong position in it (Wolfsburg HKW Nord, generator A) is noted in the
+  table.
+- With all reasons counted (24,837 GWh, including countertrading, which is booked as
+  `Börse`), 78.9 % is located.
+
+The table holds the plant names of the export and the BNetzA numbers, no measures,
+energies, positions or other fields of either source.
