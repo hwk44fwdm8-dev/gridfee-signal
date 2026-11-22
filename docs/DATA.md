@@ -179,6 +179,51 @@ a URL, which takes about 15 minutes.
 is assumed to blow equally within a TSO zone. Population places demand without regard
 to industry. Each zone still belongs to one TSO zone only (see above).
 
+## Population per 1 km grid cell
+
+`data/population/population_1km.csv.gz` gives the residents of every inhabited 1 km
+grid cell in Germany (210,556 cells) with the position of the cell centre, for placing
+load on substations by the population nearest to each. It is not yet used by a command.
+
+```
+lon,lat,nuts2,population
+8.80265,48.50947,DE11,44
+```
+
+Rebuild it with (needs the `derive` extra):
+
+```bash
+python scripts/build_population_grid.py
+```
+
+- **Source:** Statistisches Bundesamt, Zensus 2022, "Bevölkerungszahl im 1-km-Gitter"
+  ([file](https://www.destatis.de/static/DE/zensus/gitterdaten/Zensus2022_Bevoelkerungszahl.zip)),
+  residents on 15 May 2022, under the Datenlizenz Deutschland – Namensnennung –
+  Version 2.0. Cells follow the European 1 km grid (EPSG:3035); `lon` and `lat` are the
+  cell centre in WGS 84.
+- **Region:** the NUTS 2021 level-2 region that holds the cell centre (GISCO boundaries,
+  1:1 million). 816 centres on the coast or the border lie outside every region and get
+  the nearest one. A cell that straddles two regions counts wholly for one.
+- **Check against Eurostat:** `nuts2_check.csv` compares the cells summed per NUTS2
+  region with the Eurostat figures of 1 January 2023 behind the population shares
+  (`demo_r_d2jan`). The grid is lower in every region, by 0.08 % to 1.75 % (median
+  0.42 %; Hamburg 1.75 %, Bremen 1.37 %, Berlin 1.15 %), and by 0.50 % for Germany. The
+  two are not the same day: the census is 7.5 months earlier. A cell on a region border
+  counts wholly for one side, which matters most for the city states. A test keeps every
+  region within 2 %.
+- **Use:** `gridfee.injections.population.scale_to_regions` scales the cells of each
+  region so that the region matches given totals, for example the Eurostat figures, so
+  that load placed with the grid adds up to the same regional shares.
+
+**Limits.** Destatis perturbs small counts to protect confidentiality (cell-key method)
+and leaves out cells without residents, so the cells need not add up to the published
+census totals; 8,766 residents at 277 addresses that could not be processed are counted
+for their municipality only and are missing here. Population places demand without
+regard to industry. The municipal figures of the Gemeindeverzeichnis for the end of 2022
+were tried first and not used: they sum to 84.36 million, 1.5 % above the Eurostat
+figure, differ by more than 2 % in several regions, and give a city such as Berlin as a
+single unit.
+
 ## Generation costs per fuel (ASSUMPTION)
 
 `data/costs/generation_costs_2023.csv` gives one cost per fuel for
