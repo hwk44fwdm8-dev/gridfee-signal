@@ -810,6 +810,7 @@ def _write_opf(result: OPFResult, out: Path) -> None:
     else:
         # Do not leave the shortfall of an earlier run next to these results.
         (out / "load_shedding_mw.csv").unlink(missing_ok=True)
+    (out / "load_shedding_mw.parquet").unlink(missing_ok=True)
     for name, frame in frames.items():
         frame.to_csv(out / f"{name}.csv")
 

@@ -67,11 +67,15 @@ def test_run_reports_bad_network(tmp_path):
     assert "zones.csv" in result.output
 
 
-def test_rerun_removes_stale_load_shedding_file(tmp_path):
+def test_rerun_removes_stale_load_shedding_files(tmp_path):
+    csv = tmp_path / "out" / "load_shedding_mw.csv"
+    parquet = csv.with_suffix(".parquet")
     assert _run(tmp_path, "--load-shedding-cost", "3000").exit_code == 0
-    assert (tmp_path / "out" / "load_shedding_mw.csv").is_file()
+    assert csv.is_file()
+    pd.read_csv(csv).to_parquet(parquet)
     assert _run(tmp_path).exit_code == 0
-    assert not (tmp_path / "out" / "load_shedding_mw.csv").exists()
+    assert not csv.exists()
+    assert not parquet.exists()
 
 
 def _write_smard_tables(directory, year=2023):
