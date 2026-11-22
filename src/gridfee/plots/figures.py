@@ -88,7 +88,7 @@ def plot_results(
     lines = network.lines_frame()
     line_table = line_summary(tables, lines["capacity_mw"], threshold)
 
-    figures = {}
+    figures = dict.fromkeys(FIGURES)
     if zones[["lat", "lon"]].notna().all().all():
         zone_table = zone_summary(signal, threshold)
         figures["map_signal_hours"] = _map_signal_hours(zone_table, zones, lines, regions)
@@ -100,14 +100,25 @@ def plot_results(
 
     paths = []
     for name, figure in figures.items():
-        if figure is None:
-            continue
         path = out_dir / f"{name}.png"
+        if figure is None:
+            # A figure of an earlier call that no longer applies must not stay.
+            path.unlink(missing_ok=True)
+            continue
         figure.savefig(path, dpi=DPI, bbox_inches="tight")
         plt.close(figure)
         paths.append(path)
     return paths
 
+
+FIGURES = (
+    "map_signal_hours",
+    "map_mean_signal",
+    "map_lines",
+    "timeseries_signal",
+    "timeseries_lines",
+    "timeseries_unserved",
+)
 
 # Maps
 
@@ -194,7 +205,8 @@ def _map_signal_hours(zone_table, zones, lines, regions):
 def _map_mean_signal(zone_table, zones, lines, regions):
     figure, (ax,) = _map_axes(1)
     mean = zone_table["mean_signal"]
-    size = float(mean.abs().max()) or 1.0
+    mean = mean.dropna()  # a zone has no mean when the signal has no hours
+    size = (float(mean.abs().max()) if len(mean) else 0.0) or 1.0
     _draw_base(ax, zones, lines, regions)
     norm = TwoSlopeNorm(0.0, -size, size)
     mappable = _fill_zones(ax, mean, zones, regions, "RdBu_r", norm, hide_zero=False)
