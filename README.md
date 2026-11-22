@@ -137,7 +137,9 @@ gridfee backcast --year 2023          # writes results/backcast_2023/
 `data/networks/de22`, and writes flows, shadow prices, the fee signal
 (`fee_signal.csv`, `fee_signal_class.csv`, `--format parquet` with
 `pip install -e ".[parquet]"`) and `validation.md`. The full year takes about two
-minutes. `gridfee signal --results <dir>` computes the signal from the output of
+minutes. One problem for the year grows with the hours times the size of the network;
+`--block-hours 24 --workers 8` solves it a day at a time in eight processes, which a
+network of several hundred zones needs to fit in memory. `gridfee signal --results <dir>` computes the signal from the output of
 `gridfee run`, and `gridfee validate --results <dir> --year 2023` repeats the checks (into
 `revalidation.md`).
 

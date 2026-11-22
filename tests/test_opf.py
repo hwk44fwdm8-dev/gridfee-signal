@@ -150,6 +150,48 @@ def test_hour_subset_matches_full_run(three_zone):
     pd.testing.assert_frame_equal(again.shadow_prices, part.shadow_prices)
 
 
+@pytest.mark.parametrize("workers", [1, 2])
+def test_blocks_of_hours_match_one_problem(three_zone, workers):
+    hours = pd.date_range("2023-01-01", periods=48, freq="h", tz="Europe/Berlin")
+    rng = np.random.default_rng(0)
+    load = pd.DataFrame(rng.uniform(0, 400, size=(48, 2)), index=hours, columns=["B", "C"])
+    availability = pd.DataFrame({"cheap_A": rng.uniform(0.1, 1, size=48)}, index=hours)
+    cost = pd.DataFrame({"costly_C": rng.uniform(40, 60, size=48)}, index=hours)
+    subset = hours[::-1][:45]  # not sorted, and the last block is shorter
+    arguments = dict(
+        availability=availability, marginal_cost=cost, snapshots=subset, load_shedding_cost=3000
+    )
+
+    one = run_dc_opf(three_zone, load, THREE_ZONE_GENERATORS, **arguments)
+    blocks = run_dc_opf(
+        three_zone, load, THREE_ZONE_GENERATORS, **arguments, block_hours=7, workers=workers
+    )
+
+    assert one.shadow_prices.abs().to_numpy().max() > 1  # some hours are congested
+    assert one.load_shedding_mw.to_numpy().max() > 1  # and some lack generation
+    for name in ("flows_mw", "shadow_prices", "nodal_prices", "dispatch_mw", "load_shedding_mw"):
+        assert getattr(blocks, name).index.equals(subset)
+        pd.testing.assert_frame_equal(
+            getattr(blocks, name), getattr(one, name), atol=1e-6, check_freq=False
+        )
+    pd.testing.assert_frame_equal(blocks.ptdf, one.ptdf)
+    assert blocks.objective_eur == pytest.approx(one.objective_eur)
+
+
+def test_blocks_without_any_cost_and_bad_block_sizes(two_zone, hours):
+    load = pd.DataFrame({"S": [50.0, 20.0, 30.0, 40.0]}, index=hours)
+    generators = make_generators({"wind_N": ("N", 100, 0)})
+
+    result = run_dc_opf(two_zone, load, generators, block_hours=3)
+
+    assert_frame(result.dispatch_mw, {"wind_N": [50, 20, 30, 40]})
+    assert result.objective_eur == pytest.approx(0.0)
+    with pytest.raises(OPFError, match="block_hours"):
+        run_dc_opf(two_zone, load, generators, block_hours=0)
+    with pytest.raises(OPFError, match="workers"):
+        run_dc_opf(two_zone, load, generators, block_hours=2, workers=0)
+
+
 def test_availability_limits_dispatch(two_zone, hours):
     load = pd.DataFrame({"S": [50.0, 50.0]}, index=hours[:2])
     generators = make_generators({"wind_N": ("N", 100, 0), "costly_S": ("S", 500, 50)})
