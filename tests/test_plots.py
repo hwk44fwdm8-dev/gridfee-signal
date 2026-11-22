@@ -94,6 +94,19 @@ def test_daily_tables(tables):
     assert unserved["B"].tolist() == [0.0, 30.0]
 
 
+def test_line_days_without_fee_coverage_are_not_zero(tables):
+    hours = tables.shadow_prices.index + pd.to_timedelta([0, 0, 2, 2], unit="D")
+    gap = ResultTables(
+        tables.signal.set_axis(hours[:3]),
+        tables.shadow_prices.set_axis(hours),
+        tables.flows_mw.set_axis(hours),
+    )
+    daily = daily_line_hours(gap, threshold=10, include_unpriced=True)
+    assert daily.iloc[0].tolist() == [0, 0]
+    assert daily.iloc[1:3].isna().all().all()
+    assert daily.iloc[3].tolist() == [1, 0]
+
+
 def test_read_results_round_trip(tables, tmp_path):
     _write(tables, tmp_path / "results")
     read = read_results(tmp_path / "results")
@@ -104,6 +117,13 @@ def test_read_results_round_trip(tables, tmp_path):
 def test_read_results_names_missing_table(tmp_path):
     with pytest.raises(PlotError, match="fee_signal"):
         read_results(tmp_path)
+
+
+@pytest.mark.parametrize("path", ["nonexistent", "a.csv"])
+def test_read_results_requires_a_directory(tmp_path, path):
+    (tmp_path / "a.csv").touch()
+    with pytest.raises(PlotError, match="must be an existing run directory"):
+        read_results(tmp_path / path)
 
 
 def test_plot_command_writes_figures(tables, network_dir, tmp_path):

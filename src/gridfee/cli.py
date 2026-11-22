@@ -10,7 +10,6 @@ import typer
 
 from gridfee.backcast import (
     BORDER_SEPARATOR,
-    SHEDDING_TOLERANCE_MW,
     BackcastError,
     PlantCosts,
     build_backcast_inputs,
@@ -35,6 +34,7 @@ from gridfee.signal import (
     compute_fee_signal,
     write_signal,
 )
+from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
 from gridfee.two_run import METHODS, TWO_RUN, RedispatchCosts, TwoRunResult, run_two_run_backcast
 from gridfee.validation import (
     FAIL,

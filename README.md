@@ -208,8 +208,9 @@ python -m streamlit run src/gridfee/viewer.py --server.address 127.0.0.1 --brows
 
 Filter dates (Europe/Berlin) and explore the daily fee signal, zone locations,
 congested lines, and modeled unserved load. The viewer reads `fee_signal`,
-`shadow_prices`, and `flows_mw` as CSV or Parquet, plus `load_shedding_mw.csv`
-when present. It does not rerun the model, write to the run directory, or send
+`shadow_prices`, and `flows_mw` as CSV or Parquet, plus `load_shedding_mw`
+when present. Timestamps must include a UTC offset (for example
+`2023-01-01T00:00:00+01:00`). It does not rerun the model, write to the run directory, or send
 your results to a hosted service. Restart it after replacing files in the run.
 
 ## Network config
