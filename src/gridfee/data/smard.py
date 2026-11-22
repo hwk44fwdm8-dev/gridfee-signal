@@ -139,6 +139,16 @@ class SmardClient:
     ) -> pd.Series:
         """Values for the hours in ``[start, end)``; hours SMARD does not have are NaN."""
         _check_request(filter_id, region)
+        return self.fetch_series(filter_id, region, start, end)
+
+    def fetch_series(
+        self,
+        filter_id: int,
+        region: str,
+        start: pd.Timestamp,
+        end: pd.Timestamp,
+    ) -> pd.Series:
+        """Like :meth:`fetch_hourly` for an id the caller has from a SMARD source itself."""
         start, end = _to_berlin(start), _to_berlin(end)
         if start >= end:
             raise ValueError("start must be before end")
@@ -180,11 +190,11 @@ class SmardClient:
         series.index = series.index.tz_convert(TIMEZONE).rename("hour")
         return series
 
-    def _get(self, name: str, *, cache: bool) -> dict:
+    def _get(self, name: str, *, cache: bool, base_url: str = BASE_URL) -> dict:
         path = self.cache_dir / name if self.cache_dir is not None else None
         if cache and path is not None and path.is_file():
             return json.loads(path.read_text(encoding="utf-8"))
-        url = f"{BASE_URL}/{name}"
+        url = f"{base_url}/{name}"
         try:
             response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()

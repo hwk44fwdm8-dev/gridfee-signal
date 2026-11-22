@@ -81,6 +81,56 @@ used so that all rows have one source. The commercial exports and imports per bo
 that SMARD serves today add up to larger gross totals than the published 42.4 and
 54.1 TWh, so only the net figure is checked.
 
+## Output per generation unit (`gridfee.data.smard_units`)
+
+`gridfee collect-units --year 2023` collects the hourly output SMARD publishes per
+generation unit ("Kraftwerksdaten": units of plants of 100 MW or more). SMARD's own
+power plant list,
+[power_plant_metadata.json](https://www.smard.de/app/power_plant_data/power_plant_metadata.json),
+names the units, their fuel, capacity, status, location and the id of each output
+series; the series come from the same chart data API as above, in the region of the
+unit's TSO. Nothing about a unit is taken from another source. Licence as above.
+
+| file | content |
+| --- | --- |
+| `smard_unit_generation_<year>.csv` | hours x output series, MW (= MWh per hour); a column is named after the MaStR number of the unit (`SEE…`) |
+| `smard_units_<year>.csv` | every unit listed with an output series: plant, unit, EIC codes, TSO, country, fuel, capacity, status, town, coordinates, hours with a value and energy in the year |
+| `smard_unit_coverage_<year>.csv` | per fuel: units, capacity, energy of the units, national energy (`smard_generation_de_<year>.csv`, so run `collect` first) and their ratio |
+
+Missing hours stay missing; nothing is interpolated. Two units that SMARD gives one
+series (the two units of Kraftwerk Lichterfelde) are one column, under the larger
+unit (`series_unit_id`), and both count in the coverage.
+
+**The list is today's, not the year's.** It has no unit that SMARD has since dropped:
+no nuclear unit (the last three ran until 15 April 2023) and none of the hard coal and
+gas units closed since. No other list of series ids was found, so those units are
+absent. Of the 212 units listed, 142 (141 series) have values in 2023 and 70 have none.
+The list also has units below 100 MW that belong to larger plants, and 21 pumped
+storage units in Luxembourg and Austria that feed into German TSO zones.
+
+**Coverage 2023** (data as downloaded on 22 November 2026):
+
+| fuel | units with values | capacity (MW) | units (TWh) | national (TWh) | share |
+| --- | --- | --- | --- | --- | --- |
+| lignite | 29 | 17 739 | 76.7 | 77.8 | 98.5 % |
+| hard coal | 24 | 10 188 | 23.2 | 39.8 | 58.5 % |
+| gas | 44 | 11 442 | 25.4 | 51.1 | 49.8 % |
+| pumped storage | 35 | 6 182 | 7.1 | 10.2 | 69.7 % |
+| other conventional | 10 | 2 020 | 5.5 | 16.4 | 33.5 % |
+| nuclear | 0 | 0 | 0 | 6.7 | 0 % |
+
+- Fuels are SMARD's labels. Oil ("Mineralölprodukte") and "Sonstige konventionelle
+  Energieträger" are compared with the national "other conventional" series; that
+  oil belongs there is an ASSUMPTION. Units labelled "Wärme" and "Abfall" (8, none with
+  values in 2023) and the two biomass units (no values) are not compared.
+- Only 15 of the 35 pumped storage units are in Germany; they produce 3.9 TWh, 38 % of
+  the national series. The sum of all 35 exceeds the national series in 2 053 hours (by
+  up to 422 MW), so the national series does not hold all of the foreign units.
+- The lignite units together exceed the national lignite series in 813 hours, by up to
+  1 412 MW. The reason is not known; the two are different SMARD series and are not
+  reconciled here.
+- 22 953 hours are missing in the 141 series (1.9 %), most of them in gas units.
+
 ## Historical injections (`gridfee.injections`)
 
 - zonal demand = load of the TSO zone × population share of the zone

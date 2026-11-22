@@ -22,7 +22,7 @@ from gridfee.backcast import (
     run_backcast,
     split_borders_by_tso,
 )
-from gridfee.data import smard
+from gridfee.data import smard, smard_units
 from gridfee.flows import OPFError, OPFResult, run_dc_opf
 from gridfee.injections import build_historical_injections, check_energy_balance, read_shares
 from gridfee.injections.weather import read_capacity_factors
@@ -104,6 +104,45 @@ def run(
         f"{len(network.lines)} lines; {int(congested.any(axis=1).sum())} hours with congestion. "
         f"Results in {out}/"
     )
+
+
+@app.command("collect-units")
+def collect_units(
+    year: int = typer.Option(..., help="Calendar year to download."),
+    out: Path = typer.Option(Path("data/raw"), help="Output directory for the tables."),
+    cache: Path = typer.Option(Path("data/cache/smard"), help="Cache of downloaded files."),
+) -> None:
+    """Download SMARD's hourly output per generation unit of 100 MW or more for one year."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    try:
+        tables = smard_units.collect_units_year(year, out, smard.SmardClient(cache))
+        coverage = None
+        if (out / smard.table_filename("generation_de", year)).is_file():
+            coverage = smard_units.fuel_coverage(
+                tables["unit_generation"],
+                tables["units"],
+                smard.read_table(out, "generation_de", year),
+            )
+            coverage.to_csv(out / smard.table_filename("unit_coverage", year), index=False)
+    except (smard.SmardError, OSError, ValueError) as err:
+        typer.secho(f"Error: {err}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from err
+
+    generation = tables["unit_generation"]
+    typer.echo(
+        f"Wrote {generation.shape[1]} hourly output series for {year} to {out}/ "
+        f"({len(tables['units'])} units are listed with an output series at SMARD; "
+        f"{int(generation.isna().sum().sum())} hours without a value in the series written)."
+    )
+    if coverage is None:
+        typer.secho(
+            f"No national generation in {out}/ to compare with; run "
+            f"`gridfee collect --year {year}` first for the coverage per fuel.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+    else:
+        typer.echo(coverage.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
 
 
 @app.command()
