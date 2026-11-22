@@ -126,7 +126,8 @@ per-TSO comparison shows that flows inside the model differ from reality, e.g. t
 Czechia: observed +5.1 TWh from 50Hertz and -6.2 TWh into TenneT, modelled -6.4 and
 +5.4 TWh.
 
-Not done: the directional check against BNetzA redispatch data (a stretch goal).
+The check against published redispatch is a command of its own, see
+[Check against published redispatch](#check-against-published-redispatch-gridfee-redispatch).
 
 ### Result for 2023 with hourly wind and solar per zone from weather
 
@@ -243,3 +244,53 @@ For the run with bounds per day:
   heating value basis, a plant list of 2020). No sensitivity run was made.
 - **Not a market model.** There is still no heat demand, start-up cost or reserve; the
   observed bounds replace them.
+
+## Check against published redispatch (`gridfee redispatch`)
+
+`gridfee redispatch --results results/backcast_2023 --redispatch <export.csv>` holds the
+fee signal against the redispatch measures the four TSOs publish on netztransparenz.de
+(docs/DATA.md) and writes `redispatch.md` into the results. Only current-driven
+measures (`Strombedingter Redispatch`) count; voltage-driven ones and countertrading
+are left out. A measure's energy is spread evenly over its interval.
+
+The publication names the plant and the TSO that instructed it, not the plant's zone.
+The direction is therefore compared per TSO control area: where the mean signal of a
+TSO's zones is positive (feed-in adds to congestion), redispatch should lower feed-in,
+and where it is negative, raise it. Nothing is said about the direction inside a
+control area; TenneT's reaches from the North Sea to Bavaria.
+
+### Result for 2023 (run of the previous section, 312 signal hours)
+
+- **Timing fits.** All 312 signal hours had real redispatch (69 % of the other hours
+  had), with 7,432 MWh per hour on average against 2,055 MWh in the other hours. 160 of
+  the 312 lie in the tenth of the hours with the most redispatch, 225 in the top fifth,
+  none in the three tenths with (almost) none.
+- **The signal misses most of the congestion.** The 312 hours hold 2.3 of the year's
+  19.5 TWh of current-driven redispatch (12 %). Redispatch took place in 6,110 of
+  8,686 hours; the model prices a line between German zones in 312. Of the 312 hours
+  with the most redispatch, 93 have a signal.
+- **Direction fits at both ends, not in between.**
+
+| priced line | hours | 50Hertz | Amprion | TenneT | TransnetBW |
+| --- | --- | --- | --- | --- | --- |
+| Sachsen-Anhalt–Thüringen | 86 | +21 / −2,171 (86 of 86) | −1 / +2,642 (74 of 86) | −3 / −3,458 (0 of 86) | −25 / +2,044 (86 of 86) |
+| Sachsen-Anhalt–Niedersachsen-Süd | 60 | +29 / −2,606 (59 of 59) | −10 / +1,505 (53 of 53) | −9 / 0 (27 of 58) | −0.2 / +921 (57 of 57) |
+| Hessen–BW-Karlsruhe | 101 | +10 / −951 (97 of 97) | +15 / +1,901 (7 of 98) | −0.5 / −2,564 (80 of 101) | −62 / +1,606 (101 of 101) |
+| Rheinland-Pfalz–BW-Karlsruhe | 89 | +3 / −334 (62 of 63) | +24 / +703 (6 of 71) | −3 / −1,359 (0 of 89) | −59 / +868 (78 of 78) |
+
+  Each cell: mean signal in EUR/MWh / mean net redispatch in MWh per hour (raised minus
+  lowered), and in brackets the hours in which both point the same way, of the hours
+  in which both are non-zero. In 50Hertz (signal positive, feed-in lowered) and
+  TransnetBW (signal negative, feed-in raised) the direction agrees in all but one
+  hour. In Amprion it does not when a line into BW-Karlsruhe is priced: the signal is
+  positive in Rheinland-Pfalz and NRW, while the TSOs raised feed-in there. In TenneT
+  the mean signal is close to zero and redispatch lowers feed-in on balance, which is
+  what one expects from wind in the north of its area, and cannot be checked per zone.
+
+What this says about the four lines: the model finds congestion in hours in which the
+real grid was congested, and its north-east to south-west direction is the real one,
+but the real bottlenecks bind far more often than these four lines do, and the model
+puts the western bottleneck further south than the redispatch pattern suggests
+(feed-in was raised in Amprion's area, which points to a real bottleneck north of it; an
+inference, not a published fact). The
+check cannot confirm the four lines themselves: redispatch is not published per line.

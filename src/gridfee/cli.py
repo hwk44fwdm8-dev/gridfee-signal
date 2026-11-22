@@ -28,7 +28,16 @@ from gridfee.injections import build_historical_injections, check_energy_balance
 from gridfee.injections.weather import read_capacity_factors
 from gridfee.network import NetworkConfigError, ZoneNetwork, load_network, load_zones
 from gridfee.signal import NEUTRAL, SignalError, compute_fee_signal, write_signal
-from gridfee.validation import FAIL, ValidationError, validate_backcast, write_report
+from gridfee.validation import (
+    FAIL,
+    ValidationError,
+    compare_with_redispatch,
+    hourly_redispatch,
+    read_redispatch,
+    render_redispatch_report,
+    validate_backcast,
+    write_report,
+)
 
 DE22 = Path("data/networks/de22")
 # Signals smaller than this are solver noise, not congestion.
@@ -270,6 +279,57 @@ def validate(
         typer.secho(f"Error: {err}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from err
     _finish_validation(*report)
+
+
+@app.command()
+def redispatch(
+    results: Path = typer.Option(
+        ...,
+        help="Directory written by `gridfee backcast` (fee_signal.csv, fee_signal_class.csv, "
+        "shadow_prices.csv).",
+    ),
+    measures: Path = typer.Option(
+        ...,
+        "--redispatch",
+        help="CSV export of netztransparenz.de's redispatch page that covers the backcast "
+        "(docs/DATA.md).",
+    ),
+    network_dir: Path = typer.Option(DE22, "--network", help="Directory with zones.csv."),
+    out: Path | None = typer.Option(None, help="Report file (default: redispatch.md in results)."),
+) -> None:
+    """Compare the fee signal of a backcast with the redispatch the TSOs published."""
+    out = out or results / "redispatch.md"
+    try:
+        tso_of_zone = {
+            zone.zone_id: zone.tso_zone
+            for zone in load_zones(network_dir / "zones.csv")
+            if zone.tso_zone
+        }
+        signal = _read_berlin_hours(results / "fee_signal.csv")
+        classes = _read_berlin_hours(results / "fee_signal_class.csv")
+        comparison = compare_with_redispatch(
+            signal.where(classes != NEUTRAL, 0.0),
+            _read_berlin_hours(results / "shadow_prices.csv"),
+            tso_of_zone,
+            hourly_redispatch(read_redispatch(measures)),
+        )
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            render_redispatch_report(
+                comparison, f"Fee signal and published redispatch: {results.name}"
+            ),
+            encoding="utf-8",
+        )
+    except (NetworkConfigError, ValidationError, OSError, ValueError) as err:
+        typer.secho(f"Error: {err}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from err
+    hours = comparison.hours
+    typer.echo(
+        f"{hours.loc['signal', 'hours']:.0f} hours with a fee signal, "
+        f"{hours.loc['signal', 'hours_with_redispatch']:.0f} of them with redispatch "
+        f"(mean {hours.loc['signal', 'mean_redispatch_mwh']:,.0f} MWh per hour; hours "
+        f"without a signal: {hours.loc['neutral', 'mean_redispatch_mwh']:,.0f}). Report in {out}"
+    )
 
 
 @app.command()

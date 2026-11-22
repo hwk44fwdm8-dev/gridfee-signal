@@ -291,3 +291,17 @@ built with
   and 0.98 for solar in 2023. The levels differ (solar is up to 84 % too high, since
   full output is assumed at 1000 W/m2), which the split above cancels out.
 
+## Published redispatch (for `gridfee redispatch`)
+
+Source: the four TSOs' joint publication of redispatch measures,
+<https://www.netztransparenz.de/de-de/Systemdienstleistungen/Betriebsfuehrung/Redispatch>.
+Pick the period on that page (for a year, from 31 December before to 1 January after,
+so that measures across midnight are complete) and export it as CSV. The file is
+UTF-8 with `;` as separator and decimal commas; times are local with a `CET`/`CEST`
+column. `gridfee.validation.read_redispatch` uses the interval, `GRUND_DER_MASSNAHME`,
+`RICHTUNG`, `GESAMTE_ARBEIT_MWH` and `ANWEISENDER_UENB` (the TSO that instructed the
+plant).
+
+The export is not in this repository: the site's imprint reserves the copyright and
+names no open licence. The 2023 export has 15,210 measures, 12,929 of them
+current-driven redispatch.
