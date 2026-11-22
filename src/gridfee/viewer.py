@@ -192,7 +192,13 @@ def _map_limit(signal: pd.DataFrame, zones: pd.DataFrame) -> float:
 
 
 def _map(
-    zones: pd.DataFrame, summary: pd.DataFrame, selected: str, fixed_limit: float | None
+    zones: pd.DataFrame,
+    summary: pd.DataFrame,
+    selected: str,
+    fixed_limit: float | None,
+    *,
+    key: str = "zone_map",
+    choice_key: str = "zone_choice",
 ) -> None:
     points = zones.join(summary).dropna(subset=["lat", "lon", "mean_signal"]).reset_index()
     if points.empty:
@@ -239,15 +245,15 @@ def _map(
     )
 
     def select_zone() -> None:
-        picked = st.session_state["zone_map"]["selection"]["zone_pick"]
+        picked = st.session_state[key]["selection"]["zone_pick"]
         if picked:
-            st.session_state.zone_choice = picked[0]["zone_id"]
+            st.session_state[choice_key] = picked[0]["zone_id"]
 
     chart = alt.layer(markers, labels).project(type="mercator").properties(height=290)
     st.altair_chart(
         chart,
         width="stretch",
-        key="zone_map",
+        key=key,
         on_select=select_zone,
         selection_mode="zone_pick",
     )
@@ -494,10 +500,15 @@ def _asset_pattern(hourly: pd.DataFrame) -> pd.DataFrame:
     return means.to_frame("mean_signal").join(days.groupby("hour_of_day").sum()).reindex(range(24))
 
 
-def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
+def _show_asset(
+    tables: ResultTables, network: ZoneNetwork, full_signal: pd.DataFrame | None = None
+) -> None:
     zones = network.zones_frame()
     selected = st.selectbox(
-        "Site", zones.index, format_func=lambda zone: f"{zones.at[zone, 'name']} ({zone})"
+        "Site",
+        zones.index,
+        format_func=lambda zone: f"{zones.at[zone, 'name']} ({zone})",
+        key="asset_site",
     )
     kind = st.selectbox("Asset kind", ["load", "generator", "battery"])
     power = st.number_input("Power (MW)", min_value=0.01, value=1.0)
@@ -528,7 +539,7 @@ def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
     )
     signal = tables.signal.reindex(index=hours, columns=zones.index).copy()
     if tables.unserved_mw is not None:
-        unserved = tables.unserved_mw.reindex(hours).gt(0.001).any(axis=1)
+        unserved = tables.unserved_mw.reindex(hours).sum(axis=1) > SHEDDING_TOLERANCE_MW
         signal.loc[unserved] = np.nan
     result = _cached_asset_fees(selected, signal[selected], kind, power, energy, efficiency)
     summary = result.summary
@@ -554,7 +565,14 @@ def _show_asset(tables: ResultTables, network: ZoneNetwork) -> None:
             st.subheader("Hourly net injection (MW)")
             st.line_chart(result.hourly[["injection_mw"]])
     with geography:
-        _map(zones, zone_summary(signal), selected)
+        _map(
+            zones,
+            zone_summary(signal),
+            selected,
+            None if full_signal is None else _map_limit(full_signal, zones),
+            key="asset_map",
+            choice_key="asset_site",
+        )
     st.subheader("Hourly details")
     st.caption(
         "One row per solved hour, not a daily mean. Times include UTC offsets for repeated "
@@ -670,7 +688,7 @@ def main() -> None:
     with unserved_tab:
         _show_unserved(tables, day)
     with asset_tab:
-        _show_asset(tables, network)
+        _show_asset(tables, network, full_signal)
 
 
 if __name__ == "__main__":

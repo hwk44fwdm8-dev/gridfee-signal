@@ -118,7 +118,7 @@ def test_run_with_no_signal_hours_still_shows_unserved_load(monkeypatch, tmp_pat
     assert not app.exception and not app.error
     assert [m.value for m in app.metric][:3] == ["1", "0", "1"]
     assert any("No internal-zone fee signal" in info.value for info in app.info)
-    lines, unserved = (frame.value for frame in app.dataframe)
+    lines, unserved = (frame.value for frame in app.dataframe[:2])
     assert lines["Priced hours"].isna().all()
     assert (lines["Peak loading"] > 0).all()
     assert unserved["Unserved load (MWh)"].sum() == 4
@@ -162,7 +162,7 @@ def test_warns_about_missing_fee_data_and_over_capacity(monkeypatch, tmp_path):
     args = _write_run(tmp_path, hours, fee_hours=hours[:3], flow=500.0)
     app = _app(monkeypatch, *args)
     assert not app.exception and not app.error
-    assert [m.value for m in app.metric] == ["23", "3", "20"]
+    assert [m.value for m in app.metric][:3] == ["23", "3", "20"]
     assert "20 solved hours are missing fee-signal data" in app.warning[0].value
     assert "exceed the supplied line capacities" in app.warning[1].value
 
@@ -172,10 +172,10 @@ def test_unserved_load_for_no_solve_and_distributed_shortfall(monkeypatch, tmp_p
     args = _write_run(tmp_path, hours, shed_hours=hours, fee_hours=hours[:0])
     app = _app(monkeypatch, *args)
     assert not app.exception and not app.warning
-    assert app.dataframe[-1].value["Unserved load (MWh)"].sum() == pytest.approx(0.0064)
+    assert app.tabs[2].dataframe[0].value["Unserved load (MWh)"].sum() == pytest.approx(0.0064)
     day = date(2023, 1, 2)
     app.date_input[0].set_value((day, day)).run()
-    assert [m.value for m in app.metric] == ["0", "0", "0"]
+    assert [m.value for m in app.metric][:3] == ["0", "0", "0"]
     assert app.tabs[2].info[0].value == "No solved hours for these dates."
 
 
