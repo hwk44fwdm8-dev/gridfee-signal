@@ -42,10 +42,10 @@ Outputs: `fee_signal` and `fee_signal_class` (hours x zones, CSV or Parquet) and
 
 | Input of the OPF | Source | Status |
 | --- | --- | --- |
-| Demand per zone | SMARD load per TSO zone x population share | shares are placeholders |
-| Wind and solar per zone, cost 0, can be curtailed | SMARD per TSO zone x capacity share | shares are placeholders |
+| Demand per zone | SMARD load per TSO zone x population share | Eurostat population with `--population-shares data/shares/population_shares.csv`, else placeholders |
+| Wind and solar per zone, cost 0, can be curtailed | SMARD per TSO zone x capacity share | MaStR capacity with `--capacity-shares data/shares/capacity_shares.csv`, else placeholders |
 | Exchange with each neighbour | SMARD physical net export, summed over TSO zones: a load at the boundary zone when exporting, a free feed-in that can be curtailed when importing | observed; cut to the line capacity where it exceeds it |
-| All other generation | one "residual" generator per zone, same marginal cost everywhere; capacity = zone share x the year's highest national generation other than wind and solar (SMARD) | location is a placeholder (share of demand) unless `--residual-shares` is given |
+| All other generation | one "residual" generator per zone, same marginal cost everywhere; capacity = zone share x the year's highest national generation other than wind and solar (SMARD) | MaStR capacity with `--residual-shares data/shares/residual_shares.csv`, else a placeholder (share of demand) |
 | Lines | `data/networks/de22/lines.csv` | assumption, see [NETWORK.md](NETWORK.md) |
 
 Consequences:
@@ -61,7 +61,7 @@ Consequences:
 - The fee signal covers the German zones only.
 - Hours without complete cross-border or generation data are left out and listed.
 
-### Result for 2023 with what ships today
+### Result for 2023 with placeholder shares
 
 Run on 21 November 2026 with SMARD data for 2023, placeholder shares everywhere and the
 derived lines: 8,756 of 8,760 hours solved, **no line between German zones is ever
@@ -72,8 +72,41 @@ flows to their capacity. Load is left unserved in 20 hours (19.8 GWh).
 This does not mean that there was no congestion in 2023. With placeholder shares the
 wind of a TSO zone is spread evenly over its zones (TenneT's from the coast to
 Bavaria) and other generation sits where the load is, so little power has to cross
-the country; and the line capacities are generous. Real zone shares are needed before
-the signal says anything.
+the country; and the line capacities are generous.
+
+### Result for 2023 with shares from public data
+
+Run on 22 November 2026 with the share files in `data/shares/`
+([DATA.md](DATA.md#zone-shares-from-public-data)), the same SMARD data and the same
+lines. 8,756 of 8,760 hours solved in each run; validation 13 of 13.
+
+| | Placeholder shares | Population, wind and solar shares | Plus other generation by capacity |
+| --- | --- | --- | --- |
+| Hours with a congested line between German zones | 0 | 0 | 5 |
+| Hours with a fee signal other than neutral | 0 | 5 | 30 |
+| ... of which with unserved load | 0 | 4 | 28 |
+| Hours with unserved load (energy) | 20 (19.8 GWh) | 24 (20.2 GWh) | 48 (23.8 GWh) |
+
+**The signal stays neutral in more than 99.6 % of hours.** Where it is not:
+
+- **Between German zones** only the line Sachsen-Anhalt–Niedersachsen-Süd (DE05-DE09,
+  2,377 MW) is ever full, and only with other generation placed by capacity: 16 January
+  21:00–23:00 and 21 January 21:00–24:00.
+- **The other hours** come from lines to neighbours that are full while the neighbour
+  has a second line into Germany, so that power has a way round: Saarland–France
+  (DE18-FR, 2,784 MW) in all 30 hours, Niedersachsen-Nord–Netherlands (DE08-NL) in 6.
+  The hours lie on 16, 19, 21 and 22 January, 8, 9 and 28 February and 4 to 6 March.
+- **Where:** in every one of those hours all 22 zones have a signal. Feeding in adds
+  to congestion (positive) in the north and west, most in the Saarland, and relieves
+  it (negative) in Bayern and Baden-Württemberg, most in BW-Freiburg. Sachsen and
+  Thüringen change sign between hours.
+- **Size:** 28 of the 30 hours have unserved load, so their signal reflects the
+  `--load-shedding-cost` of 1000, not a cost from data.
+
+So real shares do not make the 2023 backcast show congestion between north and south.
+What is left as the cause: the assumed line capacities (all circuits between two zones
+added up, at 70 %, with nothing inside a zone), and that the backcast is not a market
+model, so other generation runs wherever it relieves the lines at no extra cost.
 
 ## Validation (`gridfee validate`, also run by `backcast`)
 

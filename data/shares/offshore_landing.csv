@@ -1,0 +1,12 @@
+# ASSUMPTION: the zone where offshore wind comes ashore, by sea and by area of the
+# BSH site development plan (Flaechenentwicklungsplan) as recorded per unit in MaStR.
+# MaStR's unit files do not hold the onshore connection point. Baltic Sea: the only
+# coastal zone of 50Hertz. North Sea: areas N-4 and N-5 (the HelWin and SylWin
+# connections, landing at Buettel in Schleswig-Holstein) to DE07, everything else to
+# DE08 (landing in Lower Saxony). Written from general knowledge of the grid
+# connections and not checked against a TSO or BSH document; see docs/DATA.md.
+sea,area,zone_id
+Ostsee,*,DE03
+Nordsee,N-4,DE07
+Nordsee,N-5,DE07
+Nordsee,*,DE08

@@ -98,10 +98,9 @@ Shares are given per TSO zone as a whole or not at all. Where a TSO zone has no 
 for a quantity, its zones get equal shares, flagged `placeholder = True` in
 `shares.csv` and announced in a warning.
 
-**All shares are placeholders today.** Real shares need the owner's
-`aggregate_to_22_zones.py`, which is not in the drafts repository yet. Until then the
-zonal series only show the mechanics: for example, offshore wind is spread evenly over
-all TenneT zones, inland ones included.
+Without share files the zonal series only show the mechanics: for example, offshore
+wind is spread evenly over all TenneT zones, inland ones included. Share files built
+from public data ship in `data/shares/`; see [Zone shares from public data](#zone-shares-from-public-data).
 
 **Energy balance.** For every TSO zone and quantity, the zonal series must add up to
 the TSO-zone series in every hour (`energy_balance.csv`). The build fails if they do
@@ -111,3 +110,61 @@ not. A TSO zone without a series for a technology must have none of it in its zo
 do not follow state borders. `data/networks/de22/TSO_SOURCES.md` lists the source for
 every zone and the zones that are split between two TSOs. For split zones the TSO-zone
 load and feed-in are attributed to the wrong zones to some degree.
+
+
+## Zone shares from public data
+
+`data/shares/` holds share files for the 22 zones, built by two scripts:
+
+```bash
+python scripts/extract_mastr.py --zip <URL or path of the MaStR full export> --out mastr/
+python scripts/build_zone_shares.py --mastr mastr/
+gridfee backcast --year 2023 --population-shares data/shares/population_shares.csv \
+    --capacity-shares data/shares/capacity_shares.csv \
+    --residual-shares data/shares/residual_shares.csv
+```
+
+| File | Content | Source |
+| --- | --- | --- |
+| `population_shares.csv` | zone's share of its TSO zone's population, used for demand | Eurostat `demo_r_d2jan`, NUTS2, 1 January 2023 |
+| `capacity_shares.csv` | zone's share of its TSO zone's onshore wind, offshore wind and solar capacity | MaStR |
+| `residual_shares.csv` | zone's share of Germany's capacity other than wind and solar | MaStR |
+| `capacity_by_zone.csv` | the population and MW behind the shares | both |
+| `ags_nuts2.csv`, `offshore_landing.csv` | lookups used by the build script | see below |
+
+**MaStR.** The Marktstammdatenregister of the Bundesnetzagentur publishes all registered
+units as one ZIP of XML files of about 3 GB
+([download page](https://www.marktstammdatenregister.de/MaStR/Datendownload)). The files
+here were built from the snapshot `Gesamtdatenexport_20261001_26.1.zip`.
+`extract_mastr.py` reads only the unit files it needs, over HTTP range requests if given
+a URL, which takes about 15 minutes.
+
+- **Units counted:** those in operation on 1 July 2023 (`--date`): commissioned on or
+  before that day (`Inbetriebnahmedatum`) and not finally shut down by it
+  (`DatumEndgueltigeStilllegung`). The register's present status is not used, because
+  the snapshot is from 2026. Units without a commissioning date are not counted. This
+  gives 59.2 GW onshore wind, 8.4 GW offshore wind and 75.0 GW solar.
+- **Capacity:** gross capacity (`Bruttoleistung`) for wind and solar, net capacity
+  (`Nettonennleistung`) for other generation.
+- **Zone:** from the municipality key (`Gemeindeschluessel`), whose first digits give the
+  federal state and Regierungsbezirk and so the NUTS2 region (`ags_nuts2.csv`) and the
+  zone (`zone_nuts2.csv`). Checked once against the coordinates of 40,530 onshore wind
+  units and the NUTS 2021 boundaries: 139 units (339 MW of 59 GW) fall in another zone
+  by coordinates. Solar units have no coordinates in the public export. 9 wind units
+  (29 MW) and 18 solar units (7 MW) have no key and are left out.
+- **Offshore wind, ASSUMPTION:** MaStR's unit files do not say where a wind farm comes
+  ashore. `offshore_landing.csv` places Baltic Sea units in Mecklenburg-Vorpommern
+  (DE03), North Sea areas N-4 and N-5 in Schleswig-Holstein (DE07) and the other North
+  Sea areas in Niedersachsen-Nord (DE08). It is written from general knowledge of the
+  grid connections and is not checked against a TSO or BSH document.
+- **Other generation:** combustion, biomass, hydro, nuclear and geothermal units, without
+  emergency generators; 96.0 GW. Units in MaStR's storage file (batteries, pumped
+  hydro) are not included. The public export withholds the municipality key of large
+  units (74.4 GW of the 96.0 GW) but names their district (Landkreis); such a unit
+  takes the zone of the other units in its district. ASSUMPTION: generation follows
+  capacity whatever the fuel, so a lignite plant and a peaking gas turbine of the same
+  size count the same.
+
+**Limits.** Capacity shares place feed-in in proportion to installed capacity, so wind
+is assumed to blow equally within a TSO zone. Population places demand without regard
+to industry. Each zone still belongs to one TSO zone only (see above).
