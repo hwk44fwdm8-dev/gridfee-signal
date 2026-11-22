@@ -109,6 +109,11 @@ Runs of up to 3 missing hours are interpolated and logged; longer gaps stop the 
 (in cross-border series they stay missing and are reported).
 With `--reference`, annual totals are compared with Bundesnetzagentur figures (±5 %).
 
+`gridfee collect-units --year 2023` adds the hourly output per generation unit that
+SMARD publishes (units of plants of 100 MW or more) and compares its sums per fuel with
+the national series; see [docs/DATA.md](docs/DATA.md) for what the list covers. No
+other command uses these tables yet.
+
 `injections` splits each TSO zone's series over its zones: demand by population share,
 wind and solar by capacity share (`--population-shares`, `--capacity-shares`). It writes
 hourly demand, feed-in and net injection per zone, the shares used and an energy-balance
