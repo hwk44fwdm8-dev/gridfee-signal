@@ -1,3 +1,3 @@
 neighbour,tso,smard_neighbour,source
-DKBH,50Hertz,DK2,User routing decision: Bornholm is in DK2; German Energy Island landfall in 50Hertz area
-UK,TenneT,NO2,User-authorised nearest North Sea proxy: NeuConnect near Wilhelmshaven; NO2 via NordLink at Wilster; UK boundary unavailable on unchanged network
+DKBH,50Hertz,DK2,Routing assumption: Bornholm is in DK2; German Energy Island landfall in 50Hertz area
+UK,TenneT,NO2,Routing proxy: NeuConnect near Wilhelmshaven; NO2 via NordLink at Wilster; UK boundary unavailable on unchanged network
