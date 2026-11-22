@@ -102,7 +102,9 @@ def main() -> None:
     buses, lines, links = read_prebuilt_network(args.osm)
     busmap = build_busmap(buses, lines, links, args.nuts, NETWORK_DIR)
     zone_lines, centres = derive_zone_lines(buses, lines, links, busmap)
-    if (NETWORK_DIR / "jao_circuits.csv").exists():
+    # de22 lists the currents of four lines; de38's own listing belongs to
+    # derive_de38_network.py, and this script then writes the OpenStreetMap version.
+    if args.network == "de22":
         circuits = pd.read_csv(NETWORK_DIR / "jao_circuits.csv", comment="#")
         zone_lines = apply_published_limits(zone_lines, circuits)
 
