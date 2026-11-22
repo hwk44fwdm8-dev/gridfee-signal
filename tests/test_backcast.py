@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -571,12 +572,14 @@ TWO_FLOWS = pd.DataFrame(
 
 
 def test_borders_by_tso_fix_the_observed_flow_of_each_border():
-    network = split_borders_by_tso(TWO_BORDERS)
+    network = split_borders_by_tso(TWO_BORDERS, TWO_FLOWS)
 
     assert network.boundary_zone_ids == ["X/Amprion", "X/TenneT"]
     ends = {line.line_id: (line.from_zone, line.to_zone) for line in network.lines}
     assert ends == {"N-S": ("N", "S"), "S-X": ("S", "X/Amprion"), "N-X": ("N", "X/TenneT")}
-    assert split_borders_by_tso(NETWORK) is NETWORK  # one TSO zone at the border
+    assert split_borders_by_tso(NETWORK, FLOWS) is NETWORK  # one TSO zone at the border
+    # a flow from a TSO zone without a line to X: X stays one zone
+    assert split_borders_by_tso(TWO_BORDERS, TWO_FLOWS.assign(TransnetBW_X=1.0)) is TWO_BORDERS
 
     zonal = build_historical_injections(network.zones[:2], TSO_LOAD, TSO_RES)
     inputs = build_backcast_inputs(network, zonal, GENERATION, TWO_FLOWS)
@@ -598,9 +601,20 @@ def test_borders_by_tso_fix_the_observed_flow_of_each_border():
 
 
 def test_borders_by_tso_need_a_line_for_every_observed_border():
-    network = split_borders_by_tso(TWO_BORDERS)
+    network = split_borders_by_tso(TWO_BORDERS, TWO_FLOWS)
     zonal = build_historical_injections(network.zones[:2], TSO_LOAD, TSO_RES)
     flows = TWO_FLOWS.assign(TransnetBW_X=1.0)
 
     with pytest.raises(BackcastError, match="TransnetBW_X"):
         build_backcast_inputs(network, zonal, GENERATION, flows)
+
+
+def test_hours_with_unserved_load_are_not_part_of_the_signal():
+    off = {"residual:N": 0.0, "residual:S": 0.0}
+    scarce = replace(_inputs(), availability=_inputs().availability.assign(**off))
+    result = run_backcast(NETWORK, scarce, load_shedding_cost=1000.0)
+
+    unserved = result.opf.load_shedding_mw.sum(axis=1) > 1e-3
+    assert unserved.any()
+    assert result.signal.signal.index.equals(unserved.index[~unserved])
+    assert result.opf.shadow_prices.index.equals(unserved.index)

@@ -23,11 +23,13 @@ hours. With one cost per fuel (`--generation-shares`, `--generation-costs`) it i
 neutral in 599 hours (6.8 %), but the dispatch behind it is far from the observed one
 (gas 123 TWh instead of 51). With plants in efficiency classes, monthly gas prices and
 each fuel's highest observed output of the day as its capacity and its lowest offered
-at no cost (`--plant-efficiency`, `--fuel-prices`), the fuel mix is within 7 % of SMARD's per fuel
-and the signal is not neutral in 1,171 hours (13 %), again mostly because of full lines
-to France; a line between German zones has a price in 120 hours. That agreement comes
-largely from the observed bounds, the costs remain assumptions, and 228 of those hours
-have unserved load, where the signal reflects the model's penalty and not data
+at no cost (`--plant-efficiency`, `--fuel-prices`), and the observed cross-border flow
+fixed per TSO zone and neighbour (`--borders-by-tso`), the fuel mix is within 7 % of
+SMARD's per fuel and the signal is not neutral in 312 hours (3.6 %), each with a priced
+line between German zones (into BW-Karlsruhe, out of Sachsen-Anhalt). That agreement
+comes largely from the observed bounds, and the costs and line capacities remain
+assumptions. 70 further hours have unserved load; their prices reflect the model's
+penalty and not data, so they are kept out of the signal and listed apart
 ([docs/METHODOLOGY.md](docs/METHODOLOGY.md)).
 
 ## Quick start

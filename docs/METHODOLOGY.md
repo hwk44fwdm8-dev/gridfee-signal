@@ -194,51 +194,12 @@ in their observed national output. 8,756 hours solved, 13 of 13 checks pass.
 
 | TWh in 2023 | SMARD | Model |
 | --- | --- | --- |
-| Gas | 51.1 | 122.5 |
-| Lignite | 77.8 | 36.0 |
-| Hard coal | 39.7 | 5.3 |
-| Nuclear | 6.7 | 7.8 |
-
-With the assumed prices a gas plant (107 EUR/MWh) is cheaper than a lignite plant
-(116 EUR/MWh), and with one cost per fuel that small difference decides everything:
-gas runs before all lignite and coal. The model also knows no heat demand, start-up
-costs, outages, reserves or long-term fuel contracts. So the fee signal of this run
-shows that differing costs do turn full lines into a signal, and where; its hours and
-sizes are not a finding about 2023. Getting closer needs costs per plant (efficiency
-by age) or the observed output of large plants, and is not part of this step.
-
-### Result for 2023 with plant efficiency classes and observed bounds
-
-One cost per fuel cannot reproduce the fuel mix: whichever fuel is cheaper on paper
-runs first all year. This run adds `--plant-efficiency data/shares/plant_efficiency.csv
---fuel-prices data/costs/fuel_prices_2023.csv` to the inputs above. It changes four
-things ([DATA.md](DATA.md) has the sources):
-
-1. **Efficiency per plant class.** Lignite, hard coal and gas in a zone are split into
-   classes of 0.02 of efficiency from a list of plants, so an old gas turbine costs
-   more than a new combined-cycle plant and plants of different fuels interleave.
-2. **Monthly gas price** from the import statistics (18,542 EUR/TJ in January 2023,
-   8,237 in May) instead of one value for the year.
-3. **Observed bounds per fuel** (`--plant-window day`, the default, or `week`). The
-   capacity available in an hour is the fuel's highest national output of that day;
-   its lowest output of that day runs at no cost. This stands in for what the model
-   does not know: outages, plants in reserve, heat-led operation, start-up costs.
-4. **The hourly balance of the observations is closed.** SMARD's load, generation and
-   physical flows do not add up hour by hour. Load exceeds supply in 3,546 hours of
-   2023, by up to 5.6 GW and 5.2 TWh in total (2.2 GW on average in January, under
-   0.1 GW from June to August). That difference is a supply at no cost; where supply
-   exceeds load it is demand. Both are spread over the zones like demand. Without this
-   the bounds of step 3 left 330 GWh of load unserved in 305 hours (bounds per week).
-
-**Modelled against observed generation, TWh in 2023** (8,756 hours, 13 of 13 checks):
-
-| | SMARD | One cost per fuel | Classes, bounds per week | Classes, bounds per day |
-| --- | --- | --- | --- | --- |
-| Gas | 51.1 | 122.5 | 48.9 (-4 %) | 49.9 (-2 %) |
-| Lignite | 77.8 | 36.0 | 88.1 (+13 %) | 82.0 (+5 %) |
-| Hard coal | 39.7 | 5.3 | 31.5 (-21 %) | 37.0 (-7 %) |
+| Gas | 51.1 | 122.5 | 48.7 (-5 %) | 49.8 (-3 %) |
+| Lignite | 77.8 | 36.0 | 88.4 (+14 %) | 82.0 (+5 %) |
+| Hard coal | 39.7 | 5.3 | 31.2 (-21 %) | 36.8 (-7 %) |
 | Nuclear | 6.7 | 7.8 | 7.1 (+5 %) | 6.8 (+1 %) |
-| All other than wind and solar | 255.4 | 251.6 | 255.6 | 255.7 |
+| All other than wind and solar | 255.4 | 251.6 | 255.4 | 255.4 |
+| Hours with unserved load | 0 | 23 | 5 (1.3 GWh) | 70 (22.6 GWh) |
 
 The last row does not include the supply of step 4 (5.2 TWh with bounds per day).
 
@@ -253,31 +214,30 @@ hard coal whenever it can.
 
 | Hours in 2023 | One cost per fuel | Bounds per week | Bounds per day |
 | --- | --- | --- | --- |
-| Fee signal not neutral | 599 | 1,286 | 1,171 (13 %) |
-| ... of which with unserved load | 23 | 91 | 228 |
-| A line between German zones has a price | 54 | 215 | 120 |
+| Hours in the fee signal | 8,756 | 8,751 | 8,686 |
+| Fee signal not neutral | 599 | 546 | 312 (3.6 %) |
+| A line between German zones has a price | 54 | 546 | 312 |
+| Hours with unserved load, kept out of the signal | 23 (not kept out) | 5 | 70 |
 
 For the run with bounds per day:
 
-- **Lines between German zones with a price:** Sachsen-Anhalt–Niedersachsen-Süd in 64
-  hours, Sachsen-Anhalt–Thüringen in 51, Hessen–BW-Karlsruhe in 6,
-  Rheinland-Pfalz–BW-Karlsruhe in 1.
-- **Lines to neighbours:** BW-Freiburg–France has a price in 586 hours and
-  Saarland–France in 458, Belgium in 131.
-- **Where:** as before, positive in the west and north and negative in the south. Over
-  the 943 non-neutral hours without unserved load the mean is +39 EUR/MWh in the
-  Saarland and -54 EUR/MWh in BW-Freiburg.
-- **When:** 416 of those 943 hours are in December and January, 137 from May to August.
+- **Every non-neutral hour now has a priced line between German zones.** With the
+  observed flow fixed on each border, a full line to a neighbour no longer moves the
+  signal inside Germany.
+- **Lines with a price:** Hessen–BW-Karlsruhe in 101 hours, Rheinland-Pfalz–BW-Karlsruhe
+  in 89, Sachsen-Anhalt–Thüringen in 86, Sachsen-Anhalt–Niedersachsen-Süd in 60.
+- **Where:** negative in Baden-Württemberg (mean over the 312 hours -44 EUR/MWh in
+  BW-Karlsruhe), positive in the east (+29 EUR/MWh in Sachsen-Anhalt).
 
 **Limits of this result**
 
-- **Unserved load in 228 hours (73.6 GWh).** With each fuel held to its observed range
-  and placed by capacity share, the assumed network cannot always carry the observed
-  day. In reality grid operators then start plants that were not running (redispatch,
-  grid reserve); the model has no such plants. The signal of those hours reflects the
-  penalty for unserved load. With bounds per week it is 91 hours.
-- **The signal still comes mostly from the French border**, where the observed exchange
-  is fixed and the line capacity is an assumption.
+- **Unserved load in 70 hours (22.6 GWh), 65 of them in BW-Karlsruhe** on 14 winter
+  days, with the lines from Hessen and Rheinland-Pfalz full. Each fuel is held to its
+  national observed range and placed by capacity share, so plants in the south cannot
+  run above the national level of the day. In reality grid operators then start
+  plants there (redispatch, grid reserve); the model has no such plants. These hours
+  are kept out of the signal. With bounds per week it is 5 hours (1.3 GWh).
+- **The line capacities are assumptions**, and the signal now rests on four of them.
 - **The costs are assumptions** (generic lignite price and other variable costs, one
   CO2 price and one hard coal price for the year, import price of gas with an unknown
   heating value basis, a plant list of 2020). No sensitivity run was made.

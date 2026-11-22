@@ -58,6 +58,7 @@ BALANCE = "balance"
 # boundary zone of one neighbour towards one TSO zone: "<neighbour>/<TSO zone>"
 BORDER_SEPARATOR = "/"
 _WINDOWS = {"day": "D", "week": "W"}
+SHEDDING_TOLERANCE_MW = 1e-3
 _SHARE_SUM_TOLERANCE = 1e-6
 
 
@@ -121,15 +122,21 @@ def neighbour_of(zone_id: str) -> str:
     return zone_id.split(BORDER_SEPARATOR)[0]
 
 
-def split_borders_by_tso(network: ZoneNetwork) -> ZoneNetwork:
+def split_borders_by_tso(network: ZoneNetwork, physical_flows_tso: pd.DataFrame) -> ZoneNetwork:
     """Give a neighbour reached from several TSO zones one boundary zone per TSO zone.
 
     SMARD publishes the physical flow per TSO zone and neighbour. With one zone per
     neighbour the model decides how that flow divides over the neighbour's lines, by
     their assumed susceptances; with one zone per TSO zone and neighbour
     (``FR/Amprion``, ``FR/TransnetBW``) each border carries what was observed. Line ids
-    do not change. A neighbour with lines to other boundary zones is left as it is.
+    do not change. A neighbour is left as it is if it has lines to other boundary zones
+    or if SMARD has a flow to it from a TSO zone that has no line to it in the network
+    (Amprion to Austria in the 22-zone network).
     """
+    observed: dict[str, set[str]] = {}
+    for column in physical_flows_tso.dropna(axis=1, how="all").columns:
+        tso, neighbour = column.split("_", 1)
+        observed.setdefault(neighbour, set()).add(tso)
     boundary = set(network.boundary_zone_ids)
     tso_of = network.zone_to_tso
     tso_at: dict[str, dict[str, str]] = {}
@@ -145,7 +152,9 @@ def split_borders_by_tso(network: ZoneNetwork) -> ZoneNetwork:
     split = {
         zone_id: lines
         for zone_id, lines in tso_at.items()
-        if zone_id not in keep and len(set(lines.values())) > 1
+        if zone_id not in keep
+        and len(set(lines.values())) > 1
+        and observed.get(zone_id, set()) <= set(lines.values())
     }
     if not split:
         return network
@@ -623,6 +632,9 @@ def run_backcast(
     the demand-weighted average of Germany. The signal covers the German zones
     only. Boundary zones are not fee zones, and where an observed flow was cut to
     the line capacity their prices are not determined by the model.
+
+    Hours with unserved load are not part of the signal: their shadow prices are
+    set by ``load_shedding_cost``, not by the data. They stay in ``opf``.
     """
     opf = run_dc_opf(
         network,
@@ -635,4 +647,8 @@ def run_backcast(
         ptdf_reference=inputs.ptdf_reference,
     )
     ptdf = opf.ptdf[network.internal_zone_ids]
-    return BackcastResult(inputs, opf, compute_fee_signal(opf.shadow_prices, ptdf, threshold))
+    prices = opf.shadow_prices
+    if opf.load_shedding_mw is not None:
+        unserved = opf.load_shedding_mw.sum(axis=1) > SHEDDING_TOLERANCE_MW
+        prices = prices[~unserved]
+    return BackcastResult(inputs, opf, compute_fee_signal(prices, ptdf, threshold))
