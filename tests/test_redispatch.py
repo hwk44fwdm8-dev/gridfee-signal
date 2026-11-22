@@ -103,6 +103,11 @@ def test_compare_needs_overlapping_hours(tmp_path):
     redispatch = hourly_redispatch(read_redispatch(_write(tmp_path / "rd.csv", ROWS[3:])))
     with pytest.raises(ValidationError, match="covers none"):
         compare_with_redispatch(signal, prices, TSOS, redispatch, LINES)
+    # Nor do hours on both sides of the export, or no hours at all.
+    around = signal.set_axis(signal.index[:2].append(signal.index[2:] + pd.Timedelta(days=365)))
+    for frame in (around, signal.iloc[:0]):
+        with pytest.raises(ValidationError, match="covers none"):
+            compare_with_redispatch(frame, prices, TSOS, redispatch, LINES)
 
 
 def test_compare_without_signal_or_redispatch(tmp_path):

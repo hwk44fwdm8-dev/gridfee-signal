@@ -147,8 +147,7 @@ def compare_with_redispatch(
     index = signal.index.tz_convert("UTC")
     if (
         redispatch.empty
-        or index.max() < redispatch.index.min()
-        or index.min() > redispatch.index.max()
+        or not ((index >= redispatch.index.min()) & (index <= redispatch.index.max())).any()
     ):
         raise ValidationError("the redispatch data covers none of the fee signal's hours")
     signal = signal.set_axis(index)
