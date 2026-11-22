@@ -42,12 +42,31 @@ def test_demo_filters_and_keeps_the_repeated_hour(monkeypatch):
     assert [box.value for box in app.selectbox] == ["S", "W-S"]
 
     app.date_input[0].set_value((day, day))
-    app.number_input[0].set_value(100.0)
+    app.sidebar.number_input[0].set_value(100.0)
     app.run()
     assert not app.exception
     assert app.metric[0].value == "25"
     assert [box.value for box in app.selectbox] == ["S", "W-S"]
     assert (app.dataframe[0].value[["Positive hours", "Negative hours"]] == 0).all().all()
+    assert app.dataframe[0].value[["charge_mean", "feed_in_mean"]].isna().all().all()
+    assert "Hourly line loading" in [heading.value for heading in app.tabs[1].subheader]
+    assert list(viewer._hours_of(day).strftime("%H:%M %Z"))[2:4] == ["02:00 CEST", "02:00 CET"]
+    assert len(viewer._hours_of(date(2023, 3, 26))) == 23
+
+
+def test_line_cutoff_and_fixed_map_scale(monkeypatch):
+    app = _app(monkeypatch)
+    assert any("Fixed across dates" in caption.value for caption in app.caption)
+    assert (app.dataframe[1].value["Priced hours"] > 0).any()
+    assert app.selectbox[1].value == app.dataframe[1].value.index[0]
+    app.tabs[1].number_input[0].set_value(1000)
+    app.sidebar.checkbox[0].set_value(False)
+    app.run()
+    assert not app.exception
+    assert any("Scaled to selected dates" in caption.value for caption in app.caption)
+    assert (app.dataframe[1].value["Priced hours"] == 0).all()
+    assert (app.dataframe[0].value["charge_mean"] > 0).any()
+    assert (app.dataframe[0].value["feed_in_mean"] > 0).any()
 
 
 @pytest.mark.parametrize("extension", ["csv", "parquet"])

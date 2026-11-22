@@ -22,7 +22,7 @@ from gridfee.plots import (
     read_results,
     zone_summary,
 )
-from gridfee.plots.summary import TIMEZONE
+from gridfee.plots.summary import TIMEZONE, hourly_unserved
 from gridfee.signal.fee import SHEDDING_TOLERANCE_MW
 
 
@@ -122,24 +122,60 @@ def _select_dates(tables: ResultTables, first: date, last: date) -> ResultTables
     )
 
 
-def _series(series: pd.Series, label: str) -> None:
+def _series(
+    series: pd.Series, label: str, *, hourly: bool = False, value_format: str = ",.2f"
+) -> None:
+    if series.empty:
+        return
+    period = series.index.strftime("%H:%M %Z" if hourly else "%Y-%m-%d")
     frame = pd.DataFrame(
         {
-            "day": series.index.strftime("%Y-%m-%d"),
+            "period": period,
             "value": series.values,
             "segment": series.isna().cumsum().to_numpy(),
         }
     )
+    if hourly:
+        x = alt.X(
+            "period:O",
+            title="Hour (Europe/Berlin)",
+            sort=period.tolist(),
+            axis=alt.Axis(values=period[::3].tolist(), labelAngle=0, labelOverlap="greedy"),
+        )
+        time_tooltip = alt.Tooltip("period:N", title="Hour (Europe/Berlin)")
+    elif len(period) == 1:
+        frame["period"] = series.index.strftime("%d %b %Y")
+        x = alt.X("period:O", title=None, axis=alt.Axis(labelAngle=0))
+        time_tooltip = alt.Tooltip("period:N", title="Day")
+    else:
+        step = max(1, (len(period) - 1) // 6)
+        ticks = series.index[::step].union(series.index[-1:])
+        tick_values = [
+            alt.DateTime(year=day.year, month=day.month, date=day.day, utc=True) for day in ticks
+        ]
+        x = alt.X(
+            "period:T",
+            title=None,
+            scale=alt.Scale(
+                type="utc",
+                domain=[tick_values[0], tick_values[-1]],
+                nice=False,
+            ),
+            axis=alt.Axis(values=tick_values, format="%d %b %Y", labelOverlap="greedy"),
+        )
+        time_tooltip = alt.Tooltip(
+            "period:T", title="Day", format="%d %b %Y", timeUnit="utcyearmonthdate"
+        )
     chart = (
         alt.Chart(frame)
         .mark_line(point=True)
         .encode(
-            x=alt.X("day:T", title=None, scale=alt.Scale(type="utc")),
+            x=x,
             y=alt.Y("value:Q", title=label),
             detail="segment:N",
             tooltip=[
-                alt.Tooltip("day:T", title="Day", format="%d %b %Y", timeUnit="utcyearmonthdate"),
-                alt.Tooltip("value:Q", title=label, format=",.2f"),
+                time_tooltip,
+                alt.Tooltip("value:Q", title=label, format=value_format),
             ],
         )
         .properties(height=245)
@@ -147,25 +183,44 @@ def _series(series: pd.Series, label: str) -> None:
     st.altair_chart(chart, width="stretch")
 
 
-def _map(zones: pd.DataFrame, summary: pd.DataFrame, selected: str) -> None:
+def _map_limit(signal: pd.DataFrame, zones: pd.DataFrame) -> float:
+    mapped = zones.dropna(subset=["lat", "lon"]).index.intersection(signal.columns)
+    if len(mapped) == 0 or signal.empty:
+        return 0.01
+    return max(float(daily_signal(signal[mapped]).abs().max().max()), 0.01)
+
+
+def _map(
+    zones: pd.DataFrame, summary: pd.DataFrame, selected: str, fixed_limit: float | None
+) -> None:
     points = zones.join(summary).dropna(subset=["lat", "lon", "mean_signal"]).reset_index()
     if points.empty:
         st.info("The network has no coordinates for the zones in this view.")
         return
-    points["selected"] = points["zone_id"] == selected
-    limit = max(points["mean_signal"].abs().max(), 0.01)
-    chart = (
-        alt.Chart(points)
-        .mark_circle(opacity=0.9, stroke="#334155", strokeWidth=1)
+    points["selected"] = (points["zone_id"] == selected).astype(int)
+    limit = fixed_limit if fixed_limit is not None else max(points["mean_signal"].abs().max(), 0.01)
+    scale_type = "Fixed across dates" if fixed_limit is not None else "Scaled to selected dates"
+    st.caption(
+        "**Red (+):** charging relieves congestion; feeding in adds to it. "
+        "**Blue (−):** feeding in relieves congestion; charging adds to it."
+    )
+    st.caption(f"{scale_type} · ±{limit:,.4g} EUR/MWh. Click a marker to select a zone.")
+    size = 140 if len(points) <= 40 else 28
+    selection = alt.selection_point(name="zone_pick", fields=["zone_id"], toggle=False)
+    positions = alt.Chart(points).encode(longitude="lon:Q", latitude="lat:Q")
+    markers = (
+        positions.mark_circle(opacity=0.9, stroke="#334155", strokeWidth=0.7)
         .encode(
-            longitude="lon:Q",
-            latitude="lat:Q",
             color=alt.Color(
                 "mean_signal:Q",
                 title="Mean · EUR/MWh",
-                scale=alt.Scale(domain=[-limit, limit], scheme="redblue", reverse=True),
+                scale=alt.Scale(domain=[-limit, limit], scheme="redblue", reverse=True, clamp=True),
+                legend=alt.Legend(values=[-limit, 0, limit], format=",.4g"),
             ),
-            size=alt.condition(alt.datum.selected, alt.value(340), alt.value(140)),
+            size=alt.condition(
+                alt.datum.selected == 1, alt.value(max(120, size * 2)), alt.value(size)
+            ),
+            order=alt.Order("selected:Q", sort="ascending"),
             tooltip=[
                 alt.Tooltip("name:N", title="Zone"),
                 alt.Tooltip("zone_id:N", title="ID"),
@@ -174,35 +229,74 @@ def _map(zones: pd.DataFrame, summary: pd.DataFrame, selected: str) -> None:
                 alt.Tooltip("negative_hours:Q", title="Negative hours"),
             ],
         )
-        .project(type="mercator")
-        .properties(height=290)
+        .add_params(selection)
     )
-    st.altair_chart(chart, width="stretch")
-    st.caption("Zones shown at their network coordinates; this is not a map of grid boundaries.")
+    labels = (
+        (positions.transform_filter(alt.datum.selected == 1) if len(points) > 8 else positions)
+        .mark_text(dy=-13, fontSize=11, strokeWidth=0)
+        .encode(text="zone_id:N")
+    )
+
+    def select_zone() -> None:
+        picked = st.session_state["zone_map"]["selection"]["zone_pick"]
+        if picked:
+            st.session_state.zone_choice = picked[0]["zone_id"]
+
+    chart = alt.layer(markers, labels).project(type="mercator").properties(height=290)
+    st.altair_chart(
+        chart,
+        width="stretch",
+        key="zone_map",
+        on_select=select_zone,
+        selection_mode="zone_pick",
+    )
+    st.caption("Markers show network coordinates, not zone boundaries.")
 
 
-def _show_signal(signal: pd.DataFrame, network: ZoneNetwork, threshold: float) -> None:
+def _show_signal(
+    signal: pd.DataFrame,
+    network: ZoneNetwork,
+    threshold: float,
+    full_signal: pd.DataFrame | None = None,
+) -> None:
     zones = network.zones_frame().loc[network.internal_zone_ids]
     selected = st.selectbox(
-        "Zone", zones.index, format_func=lambda zone: f"{zones.at[zone, 'name']} ({zone})"
+        "Zone",
+        zones.index,
+        format_func=lambda zone: f"{zones.at[zone, 'name']} ({zone})",
+        key="zone_choice",
     )
     if signal.empty or zones.empty:
         st.info("No internal-zone fee signal for these dates.")
         return
     signal = signal[zones.index]
     summary = zone_summary(signal, threshold)
+    st.caption("The fee signal is a modeled congestion effect, not a tariff or payment.")
     history, geography = st.columns([3, 2])
     with history:
         st.subheader("Daily mean fee signal")
         _series(daily_signal(signal[[selected]])[selected], "Fee signal · EUR/MWh")
-        st.caption("Positive: charging relieves congestion. Negative: charging worsens it.")
     with geography:
         st.subheader("Zone locations")
-        _map(zones, summary, selected)
+        if zones[["lat", "lon"]].dropna().empty:
+            st.caption(
+                "Positive: charging relieves congestion; feeding in adds to it. "
+                "Negative: feeding in relieves congestion; charging adds to it."
+            )
+        _map(
+            zones,
+            summary,
+            selected,
+            None if full_signal is None else _map_limit(full_signal, zones),
+        )
     st.subheader("Zone summary")
     st.dataframe(
         zones[["name"]]
         .join(summary)
+        .assign(
+            charge_mean=signal.where(signal > threshold).mean(),
+            feed_in_mean=-signal.where(signal < -threshold).mean(),
+        )
         .rename(
             columns={
                 "name": "Zone",
@@ -210,34 +304,109 @@ def _show_signal(signal: pd.DataFrame, network: ZoneNetwork, threshold: float) -
                 "negative_hours": "Negative hours",
                 "mean_signal": "Mean signal (EUR/MWh)",
             }
-        ),
+        )
+        .reset_index(),
+        hide_index=True,
+        column_order=[
+            "Zone",
+            "Mean signal (EUR/MWh)",
+            "Positive hours",
+            "Negative hours",
+            "charge_mean",
+            "feed_in_mean",
+            "zone_id",
+        ],
+        column_config={
+            "Zone": st.column_config.TextColumn(width=140, pinned=True),
+            "Mean signal (EUR/MWh)": st.column_config.NumberColumn("Mean (EUR/MWh)", width=125),
+            "charge_mean": st.column_config.NumberColumn(
+                "Charging · mean relief (EUR/MWh)",
+                help="Mean positive signal, using only hours above the neutral band.",
+            ),
+            "feed_in_mean": st.column_config.NumberColumn(
+                "Feed-in · mean relief (EUR/MWh)",
+                help="Mean absolute negative signal, using only hours below the neutral band.",
+            ),
+            "zone_id": "Zone ID",
+        },
     )
 
 
-def _show_lines(tables: ResultTables, network: ZoneNetwork) -> None:
+def _hours_of(day: date) -> pd.DatetimeIndex:
+    return pd.date_range(
+        pd.Timestamp(day, tz=TIMEZONE),
+        pd.Timestamp(day + timedelta(days=1), tz=TIMEZONE),
+        freq="h",
+        inclusive="left",
+    )
+
+
+def _show_lines(tables: ResultTables, network: ZoneNetwork, day: date | None = None) -> None:
     lines = network.lines_frame()
-    selected = st.selectbox("Line", lines.index)
     if lines.empty:
         st.info("This network has no lines.")
         return
+    with st.expander("What do price and loading mean?"):
+        st.markdown(
+            "- **Shadow price:** the modeled savings if that line could carry one more "
+            "megawatt for the hour, at the margin. It is not a tariff.\n"
+            "- **Mean absolute price:** average price magnitude across fee-covered hours "
+            "above the cutoff.\n"
+            "- **Mean loading:** average of absolute hourly flow divided by line capacity. "
+            "Peak loading is the highest such value."
+        )
+    cutoff = st.number_input(
+        "Line shadow-price cutoff (EUR/MWh)",
+        min_value=0.0,
+        value=0.0,
+        step=0.1,
+        help="An hour counts if the absolute line price is greater than this cutoff. "
+        "To match gridfee plot --threshold, use the same value here and in the fee neutral band.",
+    )
+    summary = line_summary(
+        tables, lines["capacity_mw"], cutoff, loading_all_solved=True
+    ).sort_values("priced_hours", ascending=False, kind="stable")
+    zone_names = network.zones_frame()["name"]
+    from_name = lines["from_zone"].map(zone_names)
+    to_name = lines["to_zone"].map(zone_names)
+    line_labels = from_name + " → " + to_name + " (" + lines.index + ")"
+    if "line_choice" not in st.session_state:
+        st.session_state.line_choice = summary.index[0]
+    selected = st.selectbox(
+        "Line", lines.index, format_func=line_labels.__getitem__, key="line_choice"
+    )
     if len(tables.flows_mw.index) == 0:
         st.info("No solved hours for these dates.")
         return
-    summary = line_summary(tables, lines["capacity_mw"], loading_all_solved=True).sort_values(
-        "priced_hours", ascending=False
-    )
     if tables.signal.empty:
         st.info("No fee-signal coverage for these dates. Loading still uses the solved flows.")
         summary["priced_hours"] = pd.Series(pd.NA, index=summary.index, dtype="Int64")
-    else:
-        counts = daily_line_hours(tables, include_unpriced=True)
-        _series(counts[selected], "Hours with a shadow price")
+    elif day is None:
+        counts = daily_line_hours(tables, cutoff, include_unpriced=True)
+        solved_days = tables.flows_mw.index.normalize()
+        days = pd.date_range(solved_days.min(), solved_days.max(), freq="D")
+        _series(counts[selected].reindex(days), "Priced hours", value_format=",.0f")
+    if day is not None:
+        hours = _hours_of(day)
+        st.subheader("Hourly line loading")
+        loading = tables.flows_mw[selected].abs() / lines.at[selected, "capacity_mw"]
+        _series(loading.reindex(hours), "Loading", hourly=True, value_format=".1%")
+        if not tables.signal.empty:
+            st.subheader("Hourly line shadow price")
+            price = tables.shadow_prices.loc[tables.signal.index, selected].abs()
+            _series(price.reindex(hours), "Absolute shadow price · EUR/MWh", hourly=True)
     if (summary["max_loading"] > 1.001).any():
         st.warning(
             "Some solved flows exceed the supplied line capacities. "
             "Check that --network uses the capacities from this run."
         )
     table = lines[["from_zone", "to_zone", "capacity_mw"]].join(summary).loc[summary.index]
+
+    def select_line() -> None:
+        picked = st.session_state["line_table"]["selection"]["rows"]
+        if picked:
+            st.session_state.line_choice = table.index[picked[0]]
+
     st.dataframe(
         table.rename(
             columns={
@@ -254,26 +423,37 @@ def _show_lines(tables: ResultTables, network: ZoneNetwork) -> None:
             "Mean loading": st.column_config.NumberColumn(format="percent"),
             "Peak loading": st.column_config.NumberColumn(format="percent"),
         },
+        key="line_table",
+        on_select=select_line,
+        selection_mode="single-row",
     )
     st.caption(
         "Prices use only hours with fee-signal data; gaps show days without coverage. "
-        "Loading uses all solved hours."
+        "Loading uses all solved hours. Select a row to show that line."
     )
 
 
-def _show_unserved(tables: ResultTables) -> None:
+def _show_unserved(tables: ResultTables, day: date | None = None) -> None:
     if len(tables.shadow_prices.index) == 0:
         st.info("No solved hours for these dates.")
         return
     if tables.unserved_mw is None:
         st.info("This run has no load shedding table.")
         return
-    by_day = daily_unserved(tables)
-    if by_day.empty:
+    if day is None:
+        values = daily_unserved(tables)
+    else:
+        values = hourly_unserved(tables.unserved_mw, SHEDDING_TOLERANCE_MW).reindex(_hours_of(day))
+    if values.empty:
         st.info(f"No modeled unserved load above {SHEDDING_TOLERANCE_MW:g} MW total in any hour.")
         return
-    _series(by_day.sum(axis=1, min_count=1), "Total unserved load · MWh")
-    st.dataframe(by_day.sum().sort_values(ascending=False).rename("Unserved load (MWh)"))
+    _series(
+        values.sum(axis=1, min_count=1),
+        "Total unserved load · MWh",
+        hourly=day is not None,
+        value_format=",.4~g",
+    )
+    st.dataframe(values.sum().sort_values(ascending=False).rename("Unserved load (MWh)"))
     st.caption(
         "Modeled shortfall, not observed outages. Backcasts omit these hours from the fee signal."
     )
@@ -309,13 +489,21 @@ def main() -> None:
         min_value=0.0,
         value=0.0,
         step=0.1,
-        help="Only changes the positive and negative hour counts, not the fee values.",
+        help="Changes which fee values count as positive or negative, not the fee values. "
+        "Set the line shadow-price cutoff separately in Lines.",
+    )
+    fixed_map = st.sidebar.checkbox(
+        "Fixed map scale across dates",
+        value=True,
+        help="Use the strongest daily mean from the whole run as the scale limit.",
     )
     if len(dates) == 2:
         st.session_state["last_complete_range"] = dates
     else:
         st.sidebar.info("Pick an end date. The charts still show the last complete range.")
     selected_dates = st.session_state.get("last_complete_range", (first, last))
+    day = selected_dates[0] if selected_dates[0] == selected_dates[1] else None
+    full_signal = tables.signal if fixed_map else None
     tables = _select_dates(tables, *selected_dates)
     solved_hours = len(tables.shadow_prices.index)
     signal_hours = len(tables.signal.index)
@@ -336,11 +524,11 @@ def main() -> None:
         )
     signal_tab, lines_tab, unserved_tab = st.tabs(["Fee signal", "Lines", "Unserved load"])
     with signal_tab:
-        _show_signal(tables.signal, network, threshold)
+        _show_signal(tables.signal, network, threshold, full_signal)
     with lines_tab:
-        _show_lines(tables, network)
+        _show_lines(tables, network, day)
     with unserved_tab:
-        _show_unserved(tables)
+        _show_unserved(tables, day)
 
 
 if __name__ == "__main__":
