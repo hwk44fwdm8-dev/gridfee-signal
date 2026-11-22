@@ -531,6 +531,9 @@ def test_plant_files_are_read_and_checked(tmp_path):
     path.write_text("technology,zone_id,efficiency,share\ngas,S,0.4,0.5\n")
     with pytest.raises(BackcastError, match="sum to 1"):
         read_plant_efficiency(path)
+    path.write_text("technology,zone_id,efficiency,share\ngas,S,0.401,0.5\ngas,S,0.404,0.5\n")
+    with pytest.raises(BackcastError, match="more than once"):
+        read_plant_efficiency(path)
 
     path.write_text("month,technology,fuel_eur_per_mwh_th\n1,gas,60\n2,gas,50\n")
     assert read_fuel_prices(path)["gas"].to_dict() == {1: 60.0, 2: 50.0}

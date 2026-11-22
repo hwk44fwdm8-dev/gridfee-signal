@@ -22,8 +22,8 @@ wind and solar, the 2023 backcast gives a neutral fee signal in more than 99.6 %
 hours. With one cost per fuel (`--generation-shares`, `--generation-costs`) it is not
 neutral in 599 hours (6.8 %), but the dispatch behind it is far from the observed one
 (gas 123 TWh instead of 51). With plants in efficiency classes, monthly gas prices and
-each fuel held between its lowest and highest observed output of the day
-(`--plant-efficiency`, `--fuel-prices`), the fuel mix is within 7 % of SMARD's per fuel
+each fuel's highest observed output of the day as its capacity and its lowest offered
+at no cost (`--plant-efficiency`, `--fuel-prices`), the fuel mix is within 7 % of SMARD's per fuel
 and the signal is not neutral in 1,171 hours (13 %), again mostly because of full lines
 to France; a line between German zones has a price in 120 hours. That agreement comes
 largely from the observed bounds, the costs remain assumptions, and 228 of those hours

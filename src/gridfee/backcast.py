@@ -431,8 +431,16 @@ def read_plant_efficiency(path: str | Path) -> pd.DataFrame:
     values = frame[["efficiency", "share"]]
     if values.isna().any().any() or (values <= 0).any().any() or (values > 1).any().any():
         raise BackcastError(f"{path}: efficiency and share must lie in (0, 1]")
-    if frame.duplicated(["technology", "zone_id", "efficiency"]).any():
-        raise BackcastError(f"{path}: an efficiency class is listed more than once")
+    # generator ids carry the efficiency with two decimals
+    if (
+        frame.assign(efficiency=frame["efficiency"].round(2))
+        .duplicated(["technology", "zone_id", "efficiency"])
+        .any()
+    ):
+        raise BackcastError(
+            f"{path}: an efficiency class is listed more than once (classes must differ "
+            "at two decimals)"
+        )
     totals = frame.groupby(["technology", "zone_id"])["share"].sum()
     if ((totals - 1).abs() > _SHARE_SUM_TOLERANCE).any():
         raise BackcastError(f"{path}: shares must sum to 1 per technology and zone")
