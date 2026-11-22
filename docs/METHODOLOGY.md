@@ -224,10 +224,11 @@ things ([DATA.md](DATA.md) has the sources):
    its lowest output of that day runs at no cost. This stands in for what the model
    does not know: outages, plants in reserve, heat-led operation, start-up costs.
 4. **The hourly balance of the observations is closed.** SMARD's load, generation and
-   physical flows differ by up to 7 GW in an hour (load is 1.8 GW higher on average in
-   January, 1.6 GW lower in July). Where load is higher the difference is a supply at
-   no cost, where it is lower it is demand, both spread over the zones like demand.
-   Without this the bounds of step 3 leave load unserved in every zone.
+   physical flows do not add up hour by hour. Load exceeds supply in 3,546 hours of
+   2023, by up to 5.6 GW and 5.2 TWh in total (2.2 GW on average in January, under
+   0.1 GW from June to August). That difference is a supply at no cost; where supply
+   exceeds load it is demand. Both are spread over the zones like demand. Without this
+   the bounds of step 3 left 330 GWh of load unserved in 305 hours (bounds per week).
 
 **Modelled against observed generation, TWh in 2023** (8,756 hours, 13 of 13 checks):
 
@@ -239,10 +240,13 @@ things ([DATA.md](DATA.md) has the sources):
 | Nuclear | 6.7 | 7.8 | 7.1 (+5 %) | 6.8 (+1 %) |
 | All other than wind and solar | 255.4 | 251.6 | 255.6 | 255.7 |
 
-**How much of this agreement is the model's:** little. Steps 1 and 2 alone, with the
-year's highest output as capacity, give lignite about 100 TWh and hard coal about 17
-(national merit order without the network). The bounds of step 3 do most of the work,
-and the tighter they are, the closer the mix is by construction. What the costs still
+The last row includes the supply of step 4 (5.2 TWh with bounds per day).
+
+**How much of this agreement is the model's:** little. Steps 1 and 2 alone, as a
+merit order of the four fuels on SMARD's national series with the year's highest output
+as capacity and no network, give lignite 100.6 TWh, hard coal 16.8 and gas 50.3. The
+bounds of step 3 do most of the rest, and the tighter they are, the closer the mix is by
+construction. What the costs still
 decide is which plants, and so which zones, cover the range between a day's lowest and
 highest output. The remaining error has one direction: the model runs lignite before
 hard coal whenever it can.
