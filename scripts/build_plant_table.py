@@ -42,6 +42,9 @@ from gridfee.injections.zone_shares import fill_zone_from_district, in_operation
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "plants" / "plants_2023.csv"
+CONNECTIONS = ROOT / "data" / "plants" / "offshore_connections.csv"
+# Not committed (data/cache is ignored): the plant list states no licence.
+PLANT_LIST_POSITIONS = ROOT / "data" / "cache" / "plant_list_positions.csv"
 COLUMNS = {
     "EinheitMastrNummer": "plant_id",
     "Gemeindeschluessel": "ags",
@@ -144,6 +147,14 @@ def select_units(
     return units, tidy(pd.concat(reference, ignore_index=True))[columns]
 
 
+def grid_connections(units: pd.DataFrame, connections: pd.DataFrame) -> pd.Series:
+    """The substation each offshore wind unit feeds into, where the lookup names one."""
+    known = connections.dropna(subset=["substation_id"])
+    known = known.set_index("location_id")["substation_id"]
+    found = units["LokationMaStRNummer"].map(known)
+    return found.where(units["technology"] == "wind_offshore")
+
+
 def build_table(
     units: pd.DataFrame,
     position: pd.DataFrame,
@@ -152,12 +163,14 @@ def build_table(
 ) -> pd.DataFrame:
     """One row per unit of ``min_mw`` and more; smaller ones summed per place.
 
-    Small units are summed per technology, zone, municipality (or district) and
-    position, and take their municipality's position where it is known.
+    Small units are summed per technology, zone, municipality (or district),
+    position and grid connection, and take their municipality's position where it
+    is known.
     """
     table = units[
         ["plant_id", "name", "technology", "capacity_mw", "state", "district", "ags", "zone"]
     ].join(position)
+    table["grid_connection"] = units.get("grid_connection")
     table["units"] = 1
     small = table["capacity_mw"] < min_mw
     if municipalities is not None:
@@ -166,6 +179,7 @@ def build_table(
         table.loc[home, "lon"] = table.loc[home, "ags"].map(municipalities["lon"])
         table.loc[home, "location_basis"] = "municipality"
     keys = ["technology", "zone", "state", "district", "ags", "lat", "lon", "location_basis"]
+    keys.append("grid_connection")
     summed = (
         table[small]
         .groupby(keys, dropna=False, as_index=False)
@@ -192,6 +206,7 @@ def build_table(
             "lat",
             "lon",
             "location_basis",
+            "grid_connection",
         ]
     ]
 
@@ -215,14 +230,24 @@ def main() -> None:
     parser.add_argument("--date", default="2023-07-01", help="Units in operation on this day.")
     parser.add_argument("--min-mw", type=float, default=1.0, help="Smaller units are summed.")
     parser.add_argument("--out", type=Path, default=OUT)
+    parser.add_argument(
+        "--positions-out", type=Path, default=PLANT_LIST_POSITIONS, help="Not for committing."
+    )
     args = parser.parse_args()
     if not (args.mastr / "COMPLETE.txt").exists():
         raise SystemExit(
             f"{args.mastr} is not a finished extraction; run scripts/extract_mastr.py again"
         )
+    header = pd.read_csv(args.mastr / "EinheitenWind.csv", nrows=0).columns
+    if not {"Postleitzahl", "NameStromerzeugungseinheit", "Kraftwerksnummer"} <= set(header):
+        raise SystemExit(
+            f"{args.mastr} was extracted without the columns of the plant table; "
+            "run scripts/extract_mastr.py again into an empty directory"
+        )
     source = (args.mastr / "SOURCE.txt").read_text(encoding="utf-8").strip().rsplit("/", 1)[-1]
 
     units, reference = select_units(args.mastr, args.date, DE22, SHARES)
+    units["grid_connection"] = grid_connections(units, pd.read_csv(CONNECTIONS, comment="#"))
     blocks, sites = plant_number_positions(pd.read_csv(args.plant_list))
     municipalities = reference_positions(reference, "ags")
     position = locate_units(
@@ -236,6 +261,18 @@ def main() -> None:
     table = build_table(units, position, args.min_mw, municipalities)
     table[["lat", "lon"]] = table[["lat", "lon"]].round(4)
     table["capacity_mw"] = table["capacity_mw"].round(4)
+    listed = table["location_basis"] == "plant_list"
+    args.positions_out.parent.mkdir(parents=True, exist_ok=True)
+    write(
+        args.positions_out,
+        [
+            "Positions of the plants with location_basis plant_list, from Open Power System",
+            "Data, Conventional power plants 2020-10-01, which states no licence: for local",
+            "use by scripts/place_plants.py, not for committing or passing on.",
+        ],
+        table.loc[listed, ["plant_id", "lat", "lon"]],
+    )
+    table.loc[listed, ["lat", "lon"]] = float("nan")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     write(
         args.out,
@@ -250,12 +287,15 @@ def main() -> None:
             "for lack of a municipality key. location_basis says where lat/lon come from:",
             "  coordinates   the unit's own in MaStR",
             "  plant_list    by BNetzA plant number from Open Power System Data, Conventional",
-            "                power plants 2020-10-01 (MaStR withholds the place of large units)",
+            "                power plants 2020-10-01 (MaStR withholds the place of large units).",
+            "                That list states no licence, so lat/lon are left empty here and",
+            f"                written to {args.positions_out.name} beside the build instead",
             "  municipality  median of MaStR's located units with the same municipality key",
             "  postcode      the same by postcode",
             "  district      ASSUMPTION: the same by district (Landkreis), tens of km off",
-            "  missing       none of these; no position",
-            "Offshore wind has its position at sea, not where it comes ashore.",
+            "  missing       none of these; no position (and no lat/lon)",
+            "Offshore wind has its position at sea; grid_connection is the substation its",
+            f"cable ends at, from {CONNECTIONS.name} (empty: not known or not offshore).",
             "Built by scripts/build_plant_table.py; see docs/DATA.md.",
         ],
         table,
