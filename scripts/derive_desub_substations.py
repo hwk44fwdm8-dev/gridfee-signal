@@ -128,9 +128,14 @@ def match(
 
 def placed_circuits(workbook: Path, jao_map: Path, nuts: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     """JAO's German AC circuits with the place and region of both ends; the map positions."""
-    circuits = jao.german_circuits(
-        jao.read_sheet(workbook, "Lines"), jao.read_sheet(workbook, "Tielines")
-    )
+    # A few circuits are listed in sections under one EIC code (a line with a branch
+    # to a third substation). Each section is a circuit of its own here: the later
+    # ones get "/2", "/3" after the code.
+    listed = jao.read_sheet(workbook, "Lines")
+    ends = listed[["sub1", "sub2"]].apply(lambda row: "|".join(sorted(row)), axis=1)
+    section = ends.groupby(listed["eic"]).transform(lambda s: pd.factorize(s)[0] + 1)
+    listed["eic"] = listed["eic"].where(section == 1, listed["eic"] + "/" + section.astype(str))
+    circuits = jao.german_circuits(listed, jao.read_sheet(workbook, "Tielines"))
     circuits = circuits[~circuits.index.isin(de38.HVDC_EIC)]
     corrections = pd.read_csv(de38.NETWORK_DIR / "jao_corrections.csv", comment="#")
     corrections = corrections.set_index("eic")

@@ -87,8 +87,8 @@ eichstetten-380,eichstetten,380,True
 eichstetten-220,eichstetten,220,True
 eickum-380,eickum,380,True
 eisenach-380,eisenach,380,True
-eisenhuettenstadt-380,eisenhuettenstadt,380,False
-eisenhuettenstadt-abzweig-380,eisenhuettenstadt-abzweig,380,False
+eisenhuettenstadt-380,eisenhuettenstadt,380,True
+eisenhuettenstadt-abzweig-380,eisenhuettenstadt-abzweig,380,True
 eiserfeld-220,eiserfeld,220,True
 eller-220,eller,220,True
 elmenhorst-220,elmenhorst,220,True
@@ -173,6 +173,7 @@ hattorf-380,hattorf,380,True
 heide-w-380,heide-w,380,True
 heidelberg-220,heidelberg,220,True
 heilbronn-380,heilbronn,380,True
+heinersdorf-380,heinersdorf,380,True
 helmstedt-380,helmstedt,380,True
 hennigsdorf-220,hennigsdorf,220,True
 herbertingen-380,herbertingen,380,True

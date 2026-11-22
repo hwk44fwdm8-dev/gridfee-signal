@@ -556,7 +556,9 @@ nordlink,dc_link,wilster-w-380,NO2,0,rating,True
 11T0-0000-1959-4,line,ganderkesee-380,y-ganderkesee-rot-schwarz-g-380,380,fixed,True
 11T0-0000-1960-R,line,hardegsen-220,lehrte-220,220,dlr_max,True
 11T0-0000-1962-L,line,erzhausen-220,hardegsen-220,220,fixed,True
-11T0000000000023,line,eisenhuettenstadt-abzweig-380,eisenhuettenstadt-380,380,period,False
+11T0000000000023,line,eisenhuettenstadt-abzweig-380,eisenhuettenstadt-380,380,period,True
+11T0000000000023/2,line,eisenhuettenstadt-abzweig-380,preilack-380,380,period,True
+11T0000000000023/3,line,eisenhuettenstadt-abzweig-380,heinersdorf-380,380,period,True
 11TD2L000000002N,line,grohnde-380,algermissen-380,380,dlr_max,True
 11TD2L000000003L,line,altheim-220,sittling-220,220,dlr_max,True
 11TD2L000000004J,line,altheim-220,sittling-220,220,dlr_max,True
@@ -767,6 +769,7 @@ nordlink,dc_link,wilster-w-380,NO2,0,rating,True
 11TD8L295------Q,line,hennigsdorf-220,wustermark-220,220,period,True
 11TD8L301------I,line,marzahn-220,wuhlheide-220,220,period,True
 11TD8L302------A,line,marzahn-220,wuhlheide-abzweig-220,220,period,True
+11TD8L302------A/2,line,wuhlheide-abzweig-220,thyrow-220,220,period,True
 11TD8L303------2,line,bertikow-220,neuenhagen-220,220,period,True
 11TD8L304------V,line,neuenhagen-220,vierraden-220,220,period,True
 11TD8L305------N,line,bertikow-220,pasewalk-220,220,period,True
@@ -833,7 +836,10 @@ nordlink,dc_link,wilster-w-380,NO2,0,rating,True
 11TD8L542------S,line,graustein-380,preilack-380,380,period,True
 11TD8L543------K,line,bentwisch-380,guestrow-380,380,period,True
 11TD8L544------C,line,bentwisch-380,guestrow-380,380,period,True
-11TD8L547------P,line,eisenhuettenstadt-abzweig-380,eisenhuettenstadt-380,380,period,False
+11TD8L547------P,line,eisenhuettenstadt-abzweig-380,eisenhuettenstadt-380,380,period,True
+11TD8L547------P/2,line,eisenhuettenstadt-abzweig-380,preilack-380,380,period,True
+11TD8L547------P/3,line,neuenhagen-380,heinersdorf-380,380,period,True
+11TD8L547------P/4,line,neuenhagen-380,eisenhuettenstadt-abzweig-380,380,period,True
 11TD8L551------R,line,baerwalde-380,schmoelln-380,380,period,True
 11TD8L552------J,line,baerwalde-380,schmoelln-380,380,period,True
 11TD8L553------B,line,hagenwerder-380,schmoelln-380,380,period,True

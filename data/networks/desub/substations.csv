@@ -83,7 +83,7 @@ eichstetten,Eichstetten,substation,TRANSNETBW,DE13,DE21,48.0996,7.7539,True,True
 eickum,Eickum,substation,TENNETGMBH,DEA4,DE10,52.1052,8.5719,False,True,0,name,way/24230738
 eisenach,Eisenach,substation,50HERTZ,DEG0,DE06,51.0022,10.3864,False,True,0,name,way/948341123
 eisenhuettenstadt,Eisenhuettenstadt,substation,50HERTZ,DE40,DE02,52.4428,14.1333,False,True,0,nearest,way/414169327
-eisenhuettenstadt-abzweig,Eisenhuettenstadt (Abzweig),tee,50HERTZ,DE40,DE02,52.4428,14.1333,False,True,0,neighbours,
+eisenhuettenstadt-abzweig,Eisenhuettenstadt (Abzweig),tee,50HERTZ,DE40,DE02,52.3285,14.1014,False,True,0,neighbours,
 eiserfeld,Eiserfeld,substation,AMPRION GMBH,DEA5,DE10,50.7684,7.8641,True,False,0,neighbours,
 eller,Eller,substation,AMPRION GMBH,DEA1,DE11,51.2055,6.8476,True,False,0,name,way/1463465992
 elmenhorst,Elmenhorst,substation,AMPRION GMBH,DEA3,DE10,51.6185,7.445,True,False,0,name,way/24415232
@@ -156,6 +156,7 @@ hattorf,Hattorf,substation,TENNETGMBH,DE91,DE09,52.3674,10.7613,False,True,0,nam
 heide-w,Heide/W,substation,TENNETGMBH,DEF0,DE07,54.1625,9.0511,False,True,0,name,way/603661085
 heidelberg,Heidelberg,substation,TRANSNETBW,DE12,DE20,49.3601,8.6637,True,False,0,name_part,way/156676050
 heilbronn,Heilbronn,substation,TRANSNETBW,DE11,DE19,49.1777,9.207,False,True,0,name,way/1104947187
+heinersdorf,Heinersdorf,substation,50HERTZ,DE40,DE02,52.4428,14.1333,False,True,0,manual,way/414169327
 helmstedt,Helmstedt,substation,TENNETGMBH,DE91,DE09,52.2001,10.9994,False,True,0,name,way/26474759
 hennigsdorf,Hennigsdorf,substation,50HERTZ,DE40,DE02,52.6572,13.2063,True,False,0,name,way/30309989
 herbertingen,Herbertingen,substation,AMPRION GMBH,DE14,DE22,48.0645,9.4251,True,True,1,name,way/25306752
@@ -386,7 +387,7 @@ woringen,Woringen,substation,AMPRION GMBH,DE27,DE14,47.9389,10.2138,False,True,0
 wuergassen,Wuergassen,substation,TENNETGMBH,DEA4,DE10,51.6406,9.3878,True,True,2,name,way/274630377
 wuergau,Wuergau,substation,TENNETGMBH,DE24,DE12,49.9788,11.1065,False,True,4,name,way/24757393
 wuhlheide,Wuhlheide,substation,50HERTZ,DE30,DE01,52.4737,13.5061,True,False,0,name,way/22973052
-wuhlheide-abzweig,Wuhlheide (Abzweig),tee,50HERTZ,DE30,DE01,52.5356,13.5241,True,False,0,neighbours,
+wuhlheide-abzweig,Wuhlheide (Abzweig),tee,50HERTZ,DE30,DE01,52.383,13.4151,True,False,0,neighbours,
 wustermark,Wustermark,substation,50HERTZ,DE40,DE02,52.5613,12.9427,True,True,2,name,way/940635545
 y-bellendorf-polsum-s,Y-Bellendorf [POLSUM S],tee,AMPRION GMBH,DEA3,DE10,51.6474,7.0486,True,False,0,neighbours,
 y-bidngen-allg-o,Y-Bidngen [ALLG O],tee,AMPRION GMBH,DE27,DE14,47.9882,10.6014,False,True,0,neighbours,
