@@ -167,14 +167,14 @@ def _map(zones: pd.DataFrame, summary: pd.DataFrame, selected: str) -> None:
 
 def _show_signal(signal: pd.DataFrame, network: ZoneNetwork, threshold: float) -> None:
     zones = network.zones_frame().loc[network.internal_zone_ids]
+    selected = st.selectbox(
+        "Zone", zones.index, format_func=lambda zone: f"{zones.at[zone, 'name']} ({zone})"
+    )
     if signal.empty or zones.empty:
         st.info("No internal-zone fee signal for these dates.")
         return
     signal = signal[zones.index]
     summary = zone_summary(signal, threshold)
-    selected = st.selectbox(
-        "Zone", zones.index, format_func=lambda zone: f"{zones.at[zone, 'name']} ({zone})"
-    )
     history, geography = st.columns([3, 2])
     with history:
         st.subheader("Daily mean fee signal")
@@ -199,14 +199,14 @@ def _show_signal(signal: pd.DataFrame, network: ZoneNetwork, threshold: float) -
 
 
 def _show_lines(tables: ResultTables, network: ZoneNetwork) -> None:
-    if tables.signal.empty or tables.shadow_prices.shape[1] == 0:
+    lines = network.lines_frame()
+    selected = st.selectbox("Line", lines.index)
+    if tables.signal.empty or lines.empty:
         st.info("No lines with fee-signal coverage for these dates.")
         return
-    lines = network.lines_frame()
     summary = line_summary(tables, lines["capacity_mw"]).sort_values(
         "priced_hours", ascending=False
     )
-    selected = st.selectbox("Line", summary.index)
     counts = daily_line_hours(tables)
     if selected in counts:
         _series(counts[selected], "Hours with a shadow price")
@@ -280,10 +280,12 @@ def main() -> None:
         step=0.1,
         help="Only changes the positive and negative hour counts, not the fee values.",
     )
-    if len(dates) != 2:
-        st.info("Select a start and an end date.")
-        st.stop()
-    tables = _select_dates(tables, *dates)
+    if len(dates) == 2:
+        st.session_state["last_complete_range"] = dates
+    else:
+        st.sidebar.info("Pick an end date. The charts still show the last complete range.")
+    selected_dates = st.session_state.get("last_complete_range", (first, last))
+    tables = _select_dates(tables, *selected_dates)
     solved_hours = len(tables.shadow_prices.index)
     signal_hours = len(tables.signal.index)
     metrics = st.columns(3)

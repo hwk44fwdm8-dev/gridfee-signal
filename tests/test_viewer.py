@@ -30,13 +30,20 @@ def test_demo_filters_and_keeps_the_repeated_hour(monkeypatch):
     ]
 
     day = date(2023, 10, 29)
-    app.date_input[0].set_value((day, day))
     app.selectbox[0].select("S")
+    app.selectbox[1].select("W-S")
+    app.run()
+    app.date_input[0].set_value((day,)).run()
+    assert not app.exception
+    assert app.metric[0].value == "337"
+    assert [box.value for box in app.selectbox] == ["S", "W-S"]
+
+    app.date_input[0].set_value((day, day))
     app.number_input[0].set_value(100.0)
     app.run()
     assert not app.exception
     assert app.metric[0].value == "25"
-    assert app.selectbox[0].value == "S"
+    assert [box.value for box in app.selectbox] == ["S", "W-S"]
     assert (app.dataframe[0].value[["Positive hours", "Negative hours"]] == 0).all().all()
 
 
