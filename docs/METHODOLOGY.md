@@ -239,6 +239,9 @@ For the run with bounds per day:
   plants there (redispatch, grid reserve); the model has no such plants. These hours
   are kept out of the signal. With bounds per week it is 5 hours (1.3 GWh).
 - **The line capacities are assumptions**, and the signal now rests on four of them.
+  With published limits on these four lines the signal shrinks to 21 hours and the
+  unserved load disappears: see
+  [2023 with published limits](#2023-with-published-limits-on-the-four-priced-lines).
 - **The costs are assumptions** (generic lignite price and other variable costs, one
   CO2 price and one hard coal price for the year, import price of gas with an unknown
   heating value basis, a plant list of 2020). No sensitivity run was made.
@@ -294,3 +297,41 @@ puts the western bottleneck further south than the redispatch pattern suggests
 (feed-in was raised in Amprion's area, which points to a real bottleneck north of it; an
 inference, not a published fact). The
 check cannot confirm the four lines themselves: redispatch is not published per line.
+
+
+## 2023 with published limits on the four priced lines
+
+The runs above use the standard ratings of the OpenStreetMap data for every line. The
+four lines between German zones that carried the fee signal now take their rating from
+the maximum currents in JAO's Core Static Grid Model
+([NETWORK.md](NETWORK.md#published-limits-for-four-lines-jao)); their capacities rise by
+20 to 54 %. The same run as "bounds per day" above, on 22 November 2026:
+
+| Hours in 2023 | Standard ratings | Published limits on four lines |
+| --- | --- | --- |
+| Hours in the fee signal | 8,686 | 8,756 |
+| Fee signal not neutral | 312 (3.6 %) | 21 (0.2 %) |
+| Hours with unserved load, kept out of the signal | 70 (22.6 GWh) | 0 |
+| Hessen–BW-Karlsruhe priced | 101 | 6 |
+| Rheinland-Pfalz–BW-Karlsruhe priced | 89 | 0 |
+| Sachsen-Anhalt–Thüringen priced | 86 | 0 |
+| Sachsen-Anhalt–Niedersachsen-Süd priced | 60 | 15 |
+
+- **Most of the earlier signal came from the estimated limits.** With the published
+  limits 21 hours remain, on two lines. The unserved load in BW-Karlsruhe is gone, so
+  it was a result of the two lines into that zone being rated too low.
+- **Where:** as before, negative in Baden-Württemberg (mean over the 21 hours
+  -25 EUR/MWh in BW-Karlsruhe) and positive in the east (+25 EUR/MWh in
+  Sachsen-Anhalt). Validation 13 of 13; the fuel mix is bounded by observation as
+  before.
+- **Against redispatch:** all 21 hours had redispatch (mean 9,367 MWh per hour against
+  2,283 in the other hours; 18 of the 21 are in the tenth of the hours with the most
+  redispatch). They hold 0.2 of the year's 20.1 TWh, 1 %. Direction: 50Hertz lowered
+  and TransnetBW raised in all 21 hours, as the signal says; Amprion again has the
+  wrong sign in the 6 hours with Hessen–BW-Karlsruhe priced.
+- **What this means.** Real redispatch ran in 6,180 of 8,756 hours. A model with one
+  line per pair of zones and realistic limits on those lines sees almost none of it:
+  the congestion behind redispatch is mostly on single circuits and inside zones, with
+  N-1 margins that the flat 0.7 does not describe. The 21 hours are a consistent but
+  very small sample, and the limit of Hessen–BW-Karlsruhe is an upper bound
+  (`DLRmax`).

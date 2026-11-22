@@ -1,0 +1,16 @@
+# The circuits between two German zones whose published maximum current replaces the
+# OpenStreetMap standard rating in lines.csv. Source: JAO, Core Static Grid Model,
+# 3rd release (workbook of 2023-03-01), https://www.jao.eu/static-grid-model, sheets
+# "Lines" and "Tielines". (c) JAO and the Core TSOs; only these ten rows are quoted.
+# column = the workbook column the current is taken from; see docs/NETWORK.md.
+line_id,circuit,eic,tso,voltage_kv,max_current_a,column
+DE05-DE06,Lauchstaedt - Vieselbach 471,11TD8L471------J,50Hertz,380,3600,Period 1
+DE05-DE06,Lauchstaedt - Vieselbach 472,11TD8L472------B,50Hertz,380,3600,Period 1
+DE05-DE09,Helmstedt - Wolmirstedt 491-1,11T-D2-D8-000205,50Hertz,380,3150,Period 1
+DE05-DE09,Helmstedt - Wolmirstedt 492-2,11T-D2-D8-000213,50Hertz,380,3150,Period 1
+DE16-DE20,Buerstadt - Rheinau KURPFA W,11T0-0000-1422-P,Amprion,380,3096,DLRmax(A)
+DE16-DE20,Buerstadt - Rheinau KURPFA O,11T0-0000-1421-S,Amprion,380,3096,DLRmax(A)
+DE17-DE20,Daxlanden - Maximiliansau GOLDGR,11T-D4-D7-00002U,Amprion,220,2500,Fixed
+DE17-DE20,Daxlanden - Weingarten GERMHM S,11T-D4-D7-00003S,Amprion,380,2720,Fixed
+DE17-DE20,Mutterstadt - GKM RHEIN S,11T0-0000-1544-6,Amprion,220,1380,Fixed
+DE17-DE20,Mutterstadt - GKM RHEIN N,11T0-0000-1543-9,Amprion,220,1380,Fixed

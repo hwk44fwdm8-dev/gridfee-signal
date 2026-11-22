@@ -22,7 +22,12 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 
-from gridfee.network.pypsa_eur import LINE_COLUMNS, derive_zone_lines, read_prebuilt_network
+from gridfee.network.pypsa_eur import (
+    LINE_COLUMNS,
+    apply_published_limits,
+    derive_zone_lines,
+    read_prebuilt_network,
+)
 
 NETWORK_DIR = Path(__file__).parents[1] / "data" / "networks" / "de22"
 # Denmark is two bidding zones, which SMARD reports separately. Buses west of the
@@ -91,6 +96,8 @@ def main() -> None:
     buses, lines, links = read_prebuilt_network(args.osm)
     busmap = build_busmap(buses, lines, links, args.nuts)
     zone_lines, centres = derive_zone_lines(buses, lines, links, busmap)
+    circuits = pd.read_csv(NETWORK_DIR / "jao_circuits.csv", comment="#")
+    zone_lines = apply_published_limits(zone_lines, circuits)
 
     zones = read_commented_csv(NETWORK_DIR / "zones.csv")
     zones = zones[zones["kind"] == "internal"].reindex(
@@ -130,6 +137,8 @@ LINES_HEADER = """\
 # scripts/derive_de22_network.py from PyPSA-Eur's prebuilt electricity network 0.8
 # (OpenStreetMap data, 220 kV and above, in service). See docs/NETWORK.md.
 # capacity_mw = 0.7 x summed thermal rating of the AC lines + rating of DC links.
+# The four lines in jao_circuits.csv take their rating from the maximum currents
+# that JAO's Core Static Grid Model publishes; the 0.7 stays an assumption.
 # Data licence: ODbL 1.0, (c) OpenStreetMap contributors; see LICENSE-DATA.md.
 """
 
